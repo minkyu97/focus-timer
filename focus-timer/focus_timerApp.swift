@@ -9,6 +9,11 @@ import SwiftUI
 
 @main
 struct focus_timerApp: App {
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(FocusTimerAppDelegate.self) private var appDelegate
+    @StateObject private var windowCommandCenter = FocusTimerWindowCommandCenter.shared
+    #endif
+
     @StateObject private var clock = FocusTimerClock()
     @StateObject private var store = TimerStore()
     @StateObject private var systemAppearance = FocusTimerSystemAppearance()
@@ -16,6 +21,8 @@ struct focus_timerApp: App {
     @AppStorage("focusTimer.accentColorID") private var accentColorID = FocusTimerTheme.tomato.rawValue
     @AppStorage("focusTimer.customAccentColorHex") private var customAccentColorHex = ""
     @AppStorage("focusTimer.appearanceModeID") private var appearanceModeID = FocusTimerAppearanceMode.system.rawValue
+    @AppStorage("focusTimer.menuBarIconEnabled") private var menuBarIconEnabled = true
+    @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
     @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
 
@@ -32,8 +39,12 @@ struct focus_timerApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
-            ContentView(clock: clock, store: store)
+        Window("Focus Timer", id: MainWindowScene.id) {
+            ContentView(
+                clock: clock,
+                store: store,
+                windowCommandCenter: windowCommandCenter
+            )
                 .preferredColorScheme(preferredColorScheme)
         }
         .defaultSize(width: MainWindowScene.width, height: MainWindowScene.height)
@@ -43,10 +54,14 @@ struct focus_timerApp: App {
         Window("Mini Timer", id: MiniTimerWindowScene.id) {
             MiniTimerView(
                 clock: clock,
+                store: store,
+                windowCommandCenter: windowCommandCenter,
                 accentColor: accentColor,
                 windowOpacity: miniWindowOpacity,
                 clickThroughEnabled: miniWindowClickThrough,
-                appearanceModeID: appearanceModeID
+                appearanceModeID: appearanceModeID,
+                menuBarIconEnabled: menuBarIconEnabled,
+                menuBarIconStyleID: menuBarIconStyleID
             )
             .preferredColorScheme(preferredColorScheme)
         }

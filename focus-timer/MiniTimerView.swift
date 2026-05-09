@@ -13,11 +13,17 @@ enum MiniTimerWindowScene {
 
 struct MiniTimerView: View {
     @ObservedObject var clock: FocusTimerClock
+    @ObservedObject var store: TimerStore
+    @ObservedObject var windowCommandCenter: FocusTimerWindowCommandCenter
+
+    @Environment(\.openWindow) private var openWindow
 
     let accentColor: Color
     let windowOpacity: Double
     let clickThroughEnabled: Bool
     let appearanceModeID: String
+    let menuBarIconEnabled: Bool
+    let menuBarIconStyleID: String
 
     var body: some View {
         VStack(spacing: 6) {
@@ -51,15 +57,37 @@ struct MiniTimerView: View {
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea(edges: .top))
         .ignoresSafeArea(edges: .top)
         .overlay {
-            MiniTimerWindowConfigurator(
-                opacity: windowOpacity,
-                clickThroughEnabled: clickThroughEnabled,
-                dragStripHeight: MiniTimerWindowScene.dragStripHitHeight,
-                appearanceModeID: appearanceModeID
-            )
+            ZStack {
+                MiniTimerWindowConfigurator(
+                    opacity: windowOpacity,
+                    clickThroughEnabled: clickThroughEnabled,
+                    dragStripHeight: MiniTimerWindowScene.dragStripHitHeight,
+                    appearanceModeID: appearanceModeID
+                )
+                FocusTimerWindowCommandBridge(commandCenter: windowCommandCenter)
+
+                FocusTimerMenuBarBridge(
+                    clock: clock,
+                    store: store,
+                    isEnabled: menuBarIconEnabled,
+                    styleID: menuBarIconStyleID,
+                    onOpenMiniTimer: openMiniTimerFromMenuBar,
+                    onOpenSettings: {
+                        windowCommandCenter.requestMainWindow(.settings)
+                    }
+                )
+            }
             .frame(width: 0, height: 0)
             .allowsHitTesting(false)
         }
+    }
+
+    private func openMiniTimerFromMenuBar() {
+        openWindow(id: MiniTimerWindowScene.id)
+
+        #if os(macOS)
+        FocusTimerWindowLookup.bringToFront(id: MiniTimerWindowScene.id)
+        #endif
     }
 }
 
@@ -184,6 +212,7 @@ private struct MiniTimerWindowConfigurator: NSViewRepresentable {
         }
 
         private func configure(_ window: NSWindow, appearanceModeID: String) {
+            window.identifier = NSUserInterfaceItemIdentifier(MiniTimerWindowScene.id)
             window.level = .floating
             window.collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
             window.isMovableByWindowBackground = true

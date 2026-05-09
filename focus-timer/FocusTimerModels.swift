@@ -6,6 +6,7 @@ import AppKit
 #endif
 
 enum MainWindowScene {
+    static let id = "main-window"
     static let width: CGFloat = 340
     static let originalHeight: CGFloat = 530
     static let titlebarHeight: CGFloat = 32

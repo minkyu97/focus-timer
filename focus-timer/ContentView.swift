@@ -8,6 +8,7 @@ import AppKit
 struct ContentView: View {
     @ObservedObject var clock: FocusTimerClock
     @ObservedObject var store: TimerStore
+    @ObservedObject var windowCommandCenter: FocusTimerWindowCommandCenter
 
     @Environment(\.openWindow) private var openWindow
 
@@ -24,6 +25,7 @@ struct ContentView: View {
     @State private var timeText = FocusTimerFormatting.clock(25 * 60)
     @State private var isEditingTimeText = false
     @State private var editingStartedText: String?
+    @State private var handledMainWindowRequestID: UUID?
     @FocusState private var isTimeFieldFocused: Bool
 
     private var accentColor: Color {
@@ -47,6 +49,7 @@ struct ContentView: View {
             #if os(macOS)
             ZStack {
                 MainWindowConfigurator(appearanceModeID: appearanceModeID)
+                FocusTimerWindowCommandBridge(commandCenter: windowCommandCenter)
 
                 FocusTimerMenuBarBridge(
                     clock: clock,
@@ -54,7 +57,9 @@ struct ContentView: View {
                     isEnabled: menuBarIconEnabled,
                     styleID: menuBarIconStyleID,
                     onOpenMiniTimer: openMiniTimerFromMenuBar,
-                    onOpenSettings: openSettingsFromMenuBar
+                    onOpenSettings: {
+                        windowCommandCenter.requestMainWindow(.settings)
+                    }
                 )
             }
             .frame(width: 0, height: 0)
@@ -72,6 +77,10 @@ struct ContentView: View {
         }
         .onAppear {
             timeText = FocusTimerFormatting.clock(clock.remainingSeconds)
+            handleMainWindowRequest()
+        }
+        .onChange(of: windowCommandCenter.mainWindowRequest?.id) { _, _ in
+            handleMainWindowRequest()
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.88), value: overlayScreen)
     }
@@ -290,15 +299,6 @@ struct ContentView: View {
         #endif
     }
 
-    private func openSettingsFromMenuBar() {
-        finishTimeEditing()
-        overlayScreen = .settings
-
-        #if os(macOS)
-        NSApp.activate(ignoringOtherApps: true)
-        #endif
-    }
-
     private func beginTimeEditing() {
         guard !isEditingTimeText else { return }
 
@@ -353,6 +353,27 @@ struct ContentView: View {
         clock.setDuration(seconds)
         timeText = FocusTimerFormatting.clock(clock.remainingSeconds)
     }
+
+    private func handleMainWindowRequest() {
+        guard let request = windowCommandCenter.mainWindowRequest else { return }
+        guard handledMainWindowRequestID != request.id else { return }
+
+        handledMainWindowRequestID = request.id
+
+        switch request.presentation {
+        case .landing:
+            break
+        case .settings:
+            finishTimeEditing()
+            overlayScreen = .settings
+        }
+
+        #if os(macOS)
+        FocusTimerWindowLookup.bringToFront(id: MainWindowScene.id)
+        #endif
+
+        windowCommandCenter.finish(request)
+    }
 }
 
 private enum OverlayScreen: Equatable {
@@ -401,6 +422,7 @@ private struct MainWindowConfigurator: NSViewRepresentable {
         }
 
         private func configure(_ window: NSWindow, appearanceModeID: String) {
+            window.identifier = NSUserInterfaceItemIdentifier(MainWindowScene.id)
             window.isMovableByWindowBackground = false
             FocusTimerWindowAppearance.apply(modeID: appearanceModeID, to: window)
             window.titlebarSeparatorStyle = .none
