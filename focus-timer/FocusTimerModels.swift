@@ -155,6 +155,26 @@ enum FocusTimerAppearanceMode: String, CaseIterable, Identifiable {
     #endif
 }
 
+enum FocusTimerMenuBarIconStyle: String, CaseIterable, Identifiable {
+    case normal
+    case remainingTime
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .normal:
+            return "Normal"
+        case .remainingTime:
+            return "Time"
+        }
+    }
+
+    static func resolved(from rawValue: String) -> FocusTimerMenuBarIconStyle {
+        FocusTimerMenuBarIconStyle(rawValue: rawValue) ?? .normal
+    }
+}
+
 #if os(macOS)
 @MainActor
 final class FocusTimerSystemAppearance: ObservableObject {

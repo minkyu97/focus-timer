@@ -9,6 +9,8 @@ struct SettingsOverlayView: View {
     @Binding var customAccentColorHex: String
     @Binding var appearanceModeID: String
     @Binding var soundEnabled: Bool
+    @Binding var menuBarIconEnabled: Bool
+    @Binding var menuBarIconStyleID: String
     @Binding var miniWindowOpacity: Double
     @Binding var miniWindowClickThrough: Bool
 
@@ -92,6 +94,26 @@ struct SettingsOverlayView: View {
                                 .font(.system(size: 14, weight: .medium))
                         }
                         .toggleStyle(.switch)
+                    }
+
+                    settingsGroup {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle(isOn: $menuBarIconEnabled) {
+                                Label("Menu Bar Icon", systemImage: "menubar.rectangle")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .toggleStyle(.switch)
+
+                            Picker("Menu Bar Icon Type", selection: $menuBarIconStyleID) {
+                                ForEach(FocusTimerMenuBarIconStyle.allCases) { style in
+                                    Text(style.name).tag(style.rawValue)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .disabled(!menuBarIconEnabled)
+                            .opacity(menuBarIconEnabled ? 1 : 0.45)
+                        }
                     }
 
                     settingsGroup {

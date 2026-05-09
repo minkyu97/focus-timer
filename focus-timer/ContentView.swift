@@ -15,6 +15,8 @@ struct ContentView: View {
     @AppStorage("focusTimer.customAccentColorHex") private var customAccentColorHex = ""
     @AppStorage("focusTimer.appearanceModeID") private var appearanceModeID = FocusTimerAppearanceMode.system.rawValue
     @AppStorage("focusTimer.soundEnabled") private var soundEnabled = true
+    @AppStorage("focusTimer.menuBarIconEnabled") private var menuBarIconEnabled = true
+    @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
     @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
 
@@ -43,9 +45,20 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             #if os(macOS)
-            MainWindowConfigurator(appearanceModeID: appearanceModeID)
-                .frame(width: 0, height: 0)
-                .allowsHitTesting(false)
+            ZStack {
+                MainWindowConfigurator(appearanceModeID: appearanceModeID)
+
+                FocusTimerMenuBarBridge(
+                    clock: clock,
+                    store: store,
+                    isEnabled: menuBarIconEnabled,
+                    styleID: menuBarIconStyleID,
+                    onOpenMiniTimer: openMiniTimerFromMenuBar,
+                    onOpenSettings: openSettingsFromMenuBar
+                )
+            }
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
             #endif
         }
         .onChange(of: clock.completionCount) { _, completionCount in
@@ -249,6 +262,8 @@ struct ContentView: View {
                 customAccentColorHex: $customAccentColorHex,
                 appearanceModeID: $appearanceModeID,
                 soundEnabled: $soundEnabled,
+                menuBarIconEnabled: $menuBarIconEnabled,
+                menuBarIconStyleID: $menuBarIconStyleID,
                 miniWindowOpacity: $miniWindowOpacity,
                 miniWindowClickThrough: $miniWindowClickThrough,
                 store: store,
@@ -263,6 +278,24 @@ struct ContentView: View {
     private func playCompletionSound() {
         #if os(macOS)
         NSSound.beep()
+        #endif
+    }
+
+    private func openMiniTimerFromMenuBar() {
+        finishTimeEditing()
+        openWindow(id: MiniTimerWindowScene.id)
+
+        #if os(macOS)
+        NSApp.activate(ignoringOtherApps: true)
+        #endif
+    }
+
+    private func openSettingsFromMenuBar() {
+        finishTimeEditing()
+        overlayScreen = .settings
+
+        #if os(macOS)
+        NSApp.activate(ignoringOtherApps: true)
         #endif
     }
 
