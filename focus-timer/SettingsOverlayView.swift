@@ -2,6 +2,7 @@ import SwiftUI
 
 #if os(macOS)
 import AppKit
+import UniformTypeIdentifiers
 #endif
 
 struct SettingsOverlayView: View {
@@ -9,6 +10,8 @@ struct SettingsOverlayView: View {
     @Binding var customAccentColorHex: String
     @Binding var appearanceModeID: String
     @Binding var soundEnabled: Bool
+    @Binding var completionSoundID: String
+    @Binding var customCompletionSoundName: String
     @Binding var menuBarIconEnabled: Bool
     @Binding var menuBarIconStyleID: String
     @Binding var miniWindowOpacity: Double
@@ -32,6 +35,10 @@ struct SettingsOverlayView: View {
 
     private var isCustomColorSelected: Bool {
         accentColorID == FocusTimerAccentColor.customID && customAccentColor != nil
+    }
+
+    private var canRemoveSelectedSound: Bool {
+        completionSoundID == FocusTimerCompletionSound.customID && !customCompletionSoundName.isEmpty
     }
 
     var body: some View {
@@ -89,11 +96,55 @@ struct SettingsOverlayView: View {
                     }
 
                     settingsGroup {
-                        Toggle(isOn: $soundEnabled) {
-                            Label("Completion Sound", systemImage: "speaker.wave.2")
-                                .font(.system(size: 14, weight: .medium))
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle(isOn: $soundEnabled) {
+                                Label("Completion Sound", systemImage: "speaker.wave.2")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .toggleStyle(.switch)
+
+                            Picker("Finish Sound", selection: $completionSoundID) {
+                                ForEach(FocusTimerCompletionSound.options(customSoundName: customCompletionSoundName)) { option in
+                                    Text(option.name).tag(option.id)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .disabled(!soundEnabled)
+                            .opacity(soundEnabled ? 1 : 0.45)
+
+                            HStack(spacing: 12) {
+                                Button {
+                                    addCustomSound()
+                                } label: {
+                                    Label("Add Sound", systemImage: "plus.circle")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(!soundEnabled)
+                                .opacity(soundEnabled ? 1 : 0.45)
+
+                                Button {
+                                    previewCompletionSound()
+                                } label: {
+                                    Label("Preview", systemImage: "play.circle")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(!soundEnabled)
+
+                                Button {
+                                    removeCustomSound()
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(!canRemoveSelectedSound)
+                                .foregroundStyle(canRemoveSelectedSound ? Color.red : Color.secondary)
+                                .opacity(canRemoveSelectedSound ? 1 : 0.28)
+                            }
                         }
-                        .toggleStyle(.switch)
                     }
 
                     settingsGroup {
@@ -214,6 +265,43 @@ struct SettingsOverlayView: View {
 
             customAccentColorHex = hexString
             accentColorID = FocusTimerAccentColor.customID
+        }
+        #endif
+    }
+
+    private func addCustomSound() {
+        #if os(macOS)
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.audio]
+        panel.prompt = "Add"
+
+        guard panel.runModal() == .OK, let soundURL = panel.url else { return }
+
+        do {
+            customCompletionSoundName = try FocusTimerCompletionSound.importCustomSound(from: soundURL)
+            completionSoundID = FocusTimerCompletionSound.customID
+        } catch {
+            NSSound.beep()
+        }
+        #endif
+    }
+
+    private func previewCompletionSound() {
+        #if os(macOS)
+        FocusTimerCompletionSoundPlayer.shared.play(soundID: completionSoundID)
+        #endif
+    }
+
+    private func removeCustomSound() {
+        #if os(macOS)
+        FocusTimerCompletionSound.removeCustomSound()
+        customCompletionSoundName = ""
+
+        if completionSoundID == FocusTimerCompletionSound.customID {
+            completionSoundID = FocusTimerCompletionSound.systemAlertID
         }
         #endif
     }

@@ -16,6 +16,8 @@ struct ContentView: View {
     @AppStorage("focusTimer.customAccentColorHex") private var customAccentColorHex = ""
     @AppStorage("focusTimer.appearanceModeID") private var appearanceModeID = FocusTimerAppearanceMode.system.rawValue
     @AppStorage("focusTimer.soundEnabled") private var soundEnabled = true
+    @AppStorage("focusTimer.completionSoundID") private var completionSoundID = FocusTimerCompletionSound.systemAlertID
+    @AppStorage("focusTimer.customCompletionSoundName") private var customCompletionSoundName = ""
     @AppStorage("focusTimer.menuBarIconEnabled") private var menuBarIconEnabled = true
     @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
@@ -66,12 +68,12 @@ struct ContentView: View {
             .allowsHitTesting(false)
             #endif
         }
-        .onChange(of: clock.completionCount) { _, completionCount in
+        .onChange(of: clock.completionCount) { completionCount in
             if completionCount > 0, soundEnabled {
                 playCompletionSound()
             }
         }
-        .onChange(of: clock.remainingSeconds) { _, remainingSeconds in
+        .onChange(of: clock.remainingSeconds) { remainingSeconds in
             guard !isEditingTimeText else { return }
             timeText = FocusTimerFormatting.clock(remainingSeconds)
         }
@@ -79,7 +81,7 @@ struct ContentView: View {
             timeText = FocusTimerFormatting.clock(clock.remainingSeconds)
             handleMainWindowRequest()
         }
-        .onChange(of: windowCommandCenter.mainWindowRequest?.id) { _, _ in
+        .onChange(of: windowCommandCenter.mainWindowRequest?.id) { _ in
             handleMainWindowRequest()
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.88), value: overlayScreen)
@@ -157,7 +159,7 @@ struct ContentView: View {
                                 .onAppear {
                                     focusTimeField()
                                 }
-                                .onChange(of: isTimeFieldFocused) { _, isFocused in
+                                .onChange(of: isTimeFieldFocused) { isFocused in
                                     guard !isFocused else { return }
                                     finishTimeEditing()
                                 }
@@ -271,6 +273,8 @@ struct ContentView: View {
                 customAccentColorHex: $customAccentColorHex,
                 appearanceModeID: $appearanceModeID,
                 soundEnabled: $soundEnabled,
+                completionSoundID: $completionSoundID,
+                customCompletionSoundName: $customCompletionSoundName,
                 menuBarIconEnabled: $menuBarIconEnabled,
                 menuBarIconStyleID: $menuBarIconStyleID,
                 miniWindowOpacity: $miniWindowOpacity,
@@ -286,7 +290,7 @@ struct ContentView: View {
 
     private func playCompletionSound() {
         #if os(macOS)
-        NSSound.beep()
+        FocusTimerCompletionSoundPlayer.shared.play(soundID: completionSoundID)
         #endif
     }
 

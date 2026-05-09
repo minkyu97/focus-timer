@@ -13,10 +13,10 @@ struct FocusTimerMenuBarBridge: View {
     var body: some View {
         Color.clear
             .onAppear(perform: updateMenuBar)
-            .onChange(of: isEnabled) { _, _ in
+            .onChange(of: isEnabled) { _ in
                 updateMenuBar()
             }
-            .onChange(of: styleID) { _, _ in
+            .onChange(of: styleID) { _ in
                 updateMenuBar()
             }
     }

@@ -41,7 +41,7 @@ struct FocusTimerWindowCommandBridge: View {
     var body: some View {
         Color.clear
             .onAppear(perform: openRequestedMainWindow)
-            .onChange(of: commandCenter.mainWindowRequest?.id) { _, _ in
+            .onChange(of: commandCenter.mainWindowRequest?.id) { _ in
                 openRequestedMainWindow()
             }
     }

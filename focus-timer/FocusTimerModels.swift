@@ -176,6 +176,126 @@ enum FocusTimerMenuBarIconStyle: String, CaseIterable, Identifiable {
     }
 }
 
+struct FocusTimerCompletionSoundOption: Identifiable, Equatable {
+    let id: String
+    let name: String
+}
+
+enum FocusTimerCompletionSound {
+    static let systemAlertID = "system-alert"
+    static let customID = "custom"
+    static let customFileNameDefaultsKey = "focusTimer.customCompletionSoundFileName"
+
+    private static let systemSoundNames = [
+        "Basso",
+        "Blow",
+        "Bottle",
+        "Frog",
+        "Funk",
+        "Glass",
+        "Hero",
+        "Morse",
+        "Ping",
+        "Pop",
+        "Purr",
+        "Sosumi",
+        "Submarine",
+        "Tink"
+    ]
+
+    static func systemSoundID(_ name: String) -> String {
+        "system:\(name)"
+    }
+
+    static func systemSoundName(from id: String) -> String? {
+        let prefix = "system:"
+        guard id.hasPrefix(prefix) else { return nil }
+
+        let name = String(id.dropFirst(prefix.count))
+        return systemSoundNames.contains(name) ? name : nil
+    }
+
+    static func options(customSoundName: String) -> [FocusTimerCompletionSoundOption] {
+        var options = [
+            FocusTimerCompletionSoundOption(id: systemAlertID, name: "System Alert")
+        ]
+
+        options.append(
+            contentsOf: systemSoundNames.map { soundName in
+                FocusTimerCompletionSoundOption(id: systemSoundID(soundName), name: soundName)
+            }
+        )
+
+        if !customSoundName.isEmpty {
+            options.append(FocusTimerCompletionSoundOption(id: customID, name: customSoundName))
+        }
+
+        return options
+    }
+
+    #if os(macOS)
+    static func importCustomSound(from sourceURL: URL) throws -> String {
+        let didStartAccessing = sourceURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                sourceURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let fileManager = FileManager.default
+        let soundsDirectory = try customSoundsDirectory()
+        try fileManager.createDirectory(at: soundsDirectory, withIntermediateDirectories: true)
+
+        if let previousFileName = UserDefaults.standard.string(forKey: customFileNameDefaultsKey) {
+            try? fileManager.removeItem(at: soundsDirectory.appendingPathComponent(previousFileName))
+        }
+
+        let fileExtension = sourceURL.pathExtension.isEmpty ? "sound" : sourceURL.pathExtension
+        let destinationFileName = "completion-sound.\(fileExtension)"
+        let destinationURL = soundsDirectory.appendingPathComponent(destinationFileName)
+
+        try? fileManager.removeItem(at: destinationURL)
+        try fileManager.copyItem(at: sourceURL, to: destinationURL)
+
+        UserDefaults.standard.set(destinationFileName, forKey: customFileNameDefaultsKey)
+
+        return sourceURL.deletingPathExtension().lastPathComponent
+    }
+
+    static func customSoundURL() -> URL? {
+        guard let fileName = UserDefaults.standard.string(forKey: customFileNameDefaultsKey) else {
+            return nil
+        }
+
+        return try? customSoundsDirectory().appendingPathComponent(fileName)
+    }
+
+    static func removeCustomSound() {
+        let userDefaults = UserDefaults.standard
+
+        if let fileName = userDefaults.string(forKey: customFileNameDefaultsKey),
+           let soundsDirectory = try? customSoundsDirectory() {
+            try? FileManager.default.removeItem(at: soundsDirectory.appendingPathComponent(fileName))
+        }
+
+        userDefaults.removeObject(forKey: customFileNameDefaultsKey)
+    }
+
+    private static func customSoundsDirectory() throws -> URL {
+        let applicationSupportURL = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+
+        return applicationSupportURL
+            .appendingPathComponent("Focus Timer", isDirectory: true)
+            .appendingPathComponent("Sounds", isDirectory: true)
+    }
+    #endif
+}
+
 #if os(macOS)
 @MainActor
 final class FocusTimerSystemAppearance: ObservableObject {
@@ -261,6 +381,48 @@ final class FocusTimerAppearanceView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         onWindowOrAppearanceChange?(self)
+    }
+}
+
+@MainActor
+final class FocusTimerCompletionSoundPlayer {
+    static let shared = FocusTimerCompletionSoundPlayer()
+
+    private var activeSound: NSSound?
+
+    private init() {}
+
+    func play(soundID: String) {
+        if soundID == FocusTimerCompletionSound.customID {
+            guard playCustomSound() else {
+                NSSound.beep()
+                return
+            }
+
+            return
+        }
+
+        guard let systemSoundName = FocusTimerCompletionSound.systemSoundName(from: soundID) else {
+            NSSound.beep()
+            return
+        }
+
+        guard let sound = NSSound(named: NSSound.Name(systemSoundName)) else {
+            NSSound.beep()
+            return
+        }
+
+        activeSound = sound
+        sound.play()
+    }
+
+    private func playCustomSound() -> Bool {
+        guard let customSoundURL = FocusTimerCompletionSound.customSoundURL() else { return false }
+        guard FileManager.default.fileExists(atPath: customSoundURL.path) else { return false }
+        guard let sound = NSSound(contentsOf: customSoundURL, byReference: false) else { return false }
+
+        activeSound = sound
+        return sound.play()
     }
 }
 #endif
