@@ -1,0 +1,238 @@
+import SwiftUI
+
+#if os(macOS)
+import AppKit
+#endif
+
+enum MiniTimerWindowScene {
+    static let id = "mini-timer"
+    static let width: CGFloat = 198
+    static let height: CGFloat = 224
+    static let dragStripHitHeight: CGFloat = 32
+}
+
+struct MiniTimerView: View {
+    @ObservedObject var clock: FocusTimerClock
+
+    let accentColor: Color
+    let windowOpacity: Double
+    let clickThroughEnabled: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            #if os(macOS)
+            MiniTimerDragStrip()
+                .frame(height: 24)
+            #else
+            Color.clear
+                .frame(height: 24)
+            #endif
+
+            TimerDiskView(
+                remainingSeconds: clock.remainingSeconds,
+                selectedSeconds: clock.selectedSeconds,
+                accentColor: accentColor,
+                isRunning: clock.isRunning,
+                onDurationChange: { _ in }
+            )
+            .frame(width: 150, height: 150)
+            .allowsHitTesting(false)
+
+            Text(FocusTimerFormatting.clock(clock.remainingSeconds))
+                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
+        .frame(width: MiniTimerWindowScene.width, height: MiniTimerWindowScene.height)
+        .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea(edges: .top))
+        .ignoresSafeArea(edges: .top)
+        .overlay {
+            MiniTimerWindowConfigurator(
+                opacity: windowOpacity,
+                clickThroughEnabled: clickThroughEnabled,
+                dragStripHeight: MiniTimerWindowScene.dragStripHitHeight
+            )
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+        }
+    }
+}
+
+#if os(macOS)
+private struct MiniTimerDragStrip: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        DragStripView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class DragStripView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+    }
+}
+
+private struct MiniTimerWindowConfigurator: NSViewRepresentable {
+    let opacity: Double
+    let clickThroughEnabled: Bool
+    let dragStripHeight: CGFloat
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.update(
+            from: view,
+            opacity: opacity,
+            clickThroughEnabled: clickThroughEnabled,
+            dragStripHeight: dragStripHeight
+        )
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(
+            from: nsView,
+            opacity: opacity,
+            clickThroughEnabled: clickThroughEnabled,
+            dragStripHeight: dragStripHeight
+        )
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.uninstallMonitors()
+    }
+
+    final class Coordinator {
+        private weak var window: NSWindow?
+        private var opacity: Double = 1
+        private var clickThroughEnabled = false
+        private var dragStripHeight: CGFloat = 32
+        private var monitors: [Any] = []
+
+        func update(
+            from view: NSView,
+            opacity: Double,
+            clickThroughEnabled: Bool,
+            dragStripHeight: CGFloat
+        ) {
+            self.opacity = opacity
+            self.clickThroughEnabled = clickThroughEnabled
+            self.dragStripHeight = dragStripHeight
+
+            guard let window = view.window else {
+                DispatchQueue.main.async { [weak self, weak view] in
+                    guard let self, let view else { return }
+                    self.update(
+                        from: view,
+                        opacity: opacity,
+                        clickThroughEnabled: clickThroughEnabled,
+                        dragStripHeight: dragStripHeight
+                    )
+                }
+                return
+            }
+
+            self.window = window
+            configure(window)
+
+            if clickThroughEnabled {
+                installMonitors()
+            } else {
+                uninstallMonitors()
+            }
+
+            updateMousePolicy()
+        }
+
+        func uninstallMonitors() {
+            monitors.forEach(NSEvent.removeMonitor)
+            monitors.removeAll()
+            window?.ignoresMouseEvents = false
+        }
+
+        private func configure(_ window: NSWindow) {
+            window.level = .floating
+            window.collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
+            window.isMovableByWindowBackground = true
+            window.acceptsMouseMovedEvents = true
+            window.alphaValue = CGFloat(min(max(opacity, 0.35), 1))
+            window.backgroundColor = .windowBackgroundColor
+            window.titlebarSeparatorStyle = .none
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.styleMask.insert(.fullSizeContentView)
+            window.contentView?.wantsLayer = true
+            window.contentView?.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            neutralizeTitlebarSafeArea(in: window)
+            window.standardWindowButton(.closeButton)?.isHidden = false
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = false
+            window.standardWindowButton(.zoomButton)?.isHidden = false
+        }
+
+        private func neutralizeTitlebarSafeArea(in window: NSWindow) {
+            guard let contentView = window.contentView else { return }
+
+            let reservedTopInset = max(0, window.frame.height - window.contentLayoutRect.height)
+            contentView.additionalSafeAreaInsets = NSEdgeInsets(
+                top: -reservedTopInset,
+                left: 0,
+                bottom: 0,
+                right: 0
+            )
+            contentView.needsLayout = true
+        }
+
+        private func installMonitors() {
+            guard monitors.isEmpty else { return }
+
+            let eventMask: NSEvent.EventTypeMask = [
+                .mouseMoved,
+                .leftMouseDown,
+                .rightMouseDown,
+                .otherMouseDown,
+                .leftMouseDragged,
+                .rightMouseDragged,
+                .otherMouseDragged
+            ]
+
+            if let localMonitor = NSEvent.addLocalMonitorForEvents(matching: eventMask, handler: { [weak self] event in
+                self?.updateMousePolicy()
+                return event
+            }) {
+                monitors.append(localMonitor)
+            }
+
+            if let globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: eventMask, handler: { [weak self] _ in
+                self?.updateMousePolicy()
+            }) {
+                monitors.append(globalMonitor)
+            }
+        }
+
+        private func updateMousePolicy() {
+            guard let window else { return }
+
+            guard clickThroughEnabled else {
+                window.ignoresMouseEvents = false
+                return
+            }
+
+            let mouseLocation = NSEvent.mouseLocation
+            let windowFrame = window.frame
+            let dragStripFrame = CGRect(
+                x: windowFrame.minX,
+                y: windowFrame.maxY - dragStripHeight,
+                width: windowFrame.width,
+                height: dragStripHeight
+            )
+
+            window.ignoresMouseEvents = !dragStripFrame.contains(mouseLocation)
+        }
+    }
+}
+#endif
