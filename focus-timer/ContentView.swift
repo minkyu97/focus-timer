@@ -84,7 +84,7 @@ struct ContentView: View {
 
             VStack(spacing: 0) {
                 ZStack {
-                    Text("focus timer")
+                    Text("Focus Timer")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.secondary)
 
