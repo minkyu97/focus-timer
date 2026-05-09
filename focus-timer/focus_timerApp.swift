@@ -24,8 +24,9 @@ struct focus_timerApp: App {
         WindowGroup {
             ContentView(clock: clock, store: store)
         }
-        .defaultSize(width: 340, height: 530)
+        .defaultSize(width: MainWindowScene.width, height: MainWindowScene.height)
         .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
 
         Window("Mini Timer", id: MiniTimerWindowScene.id) {
             MiniTimerView(

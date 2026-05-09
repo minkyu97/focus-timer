@@ -34,9 +34,17 @@ struct ContentView: View {
                     .zIndex(1)
             }
         }
-        .frame(width: 340, height: 530)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(width: MainWindowScene.width, height: MainWindowScene.height)
+        .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea(edges: .top))
+        .ignoresSafeArea(edges: .top)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            #if os(macOS)
+            MainWindowConfigurator()
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+            #endif
+        }
         .onChange(of: clock.completionCount) { _, completionCount in
             if completionCount > 0, soundEnabled {
                 playCompletionSound()
@@ -59,37 +67,38 @@ struct ContentView: View {
                 .onTapGesture(perform: finishTimeEditing)
 
             VStack(spacing: 0) {
-                HStack {
-                    IconCircleButton(
-                        systemName: "line.3.horizontal",
-                        accessibilityLabel: "Timers",
-                        action: {
-                            finishTimeEditing()
-                            overlayScreen = .timers
-                        }
-                    )
-
-                    Spacer()
-
+                ZStack {
                     Text("focus timer")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.secondary)
 
-                    Spacer()
+                    HStack {
+                        IconCircleButton(
+                            systemName: "line.3.horizontal",
+                            accessibilityLabel: "Timers",
+                            action: {
+                                finishTimeEditing()
+                                overlayScreen = .timers
+                            }
+                        )
 
-                    IconCircleButton(
-                        systemName: "gearshape",
-                        accessibilityLabel: "Settings",
-                        action: {
-                            finishTimeEditing()
-                            overlayScreen = .settings
-                        }
-                    )
+                        Spacer()
+
+                        IconCircleButton(
+                            systemName: "gearshape",
+                            accessibilityLabel: "Settings",
+                            action: {
+                                finishTimeEditing()
+                                overlayScreen = .settings
+                            }
+                        )
+                    }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
+                .padding(.leading, 18)
+                .padding(.trailing, 18)
+                .padding(.top, MainWindowScene.headerTopPadding)
 
-                Spacer(minLength: 16)
+                Spacer(minLength: 8)
 
                 TimerDiskView(
                     remainingSeconds: clock.remainingSeconds,
@@ -105,8 +114,8 @@ struct ContentView: View {
                         clock.setDuration(seconds)
                     }
                 )
-                .frame(width: 260, height: 260)
-                .padding(.top, 10)
+                .frame(width: 248, height: 248)
+                .padding(.top, 6)
                 .simultaneousGesture(TapGesture().onEnded(finishTimeEditing))
 
                 HStack(spacing: 0) {
@@ -141,8 +150,8 @@ struct ContentView: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
-                .frame(height: 64)
-                .padding(.top, 18)
+                .frame(height: 58)
+                .padding(.top, 12)
 
                 HStack(spacing: 12) {
                     IconCircleButton(
@@ -205,10 +214,10 @@ struct ContentView: View {
                     .disabled(clock.isRunning)
                     .opacity(clock.isRunning ? 0.45 : 1)
                 }
-                .padding(.top, 18)
+                .padding(.top, 14)
                 .simultaneousGesture(TapGesture().onEnded(finishTimeEditing))
 
-                Spacer(minLength: 22)
+                Spacer(minLength: 12)
             }
         }
     }
@@ -312,3 +321,63 @@ private enum OverlayScreen: Equatable {
     case timers
     case settings
 }
+
+#if os(macOS)
+private struct MainWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.update(from: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.update(from: nsView)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        func update(from view: NSView) {
+            guard let window = view.window else {
+                DispatchQueue.main.async { [weak self, weak view] in
+                    guard let self, let view else { return }
+                    self.update(from: view)
+                }
+                return
+            }
+
+            configure(window)
+        }
+
+        private func configure(_ window: NSWindow) {
+            window.isMovableByWindowBackground = false
+            window.backgroundColor = .windowBackgroundColor
+            window.titlebarSeparatorStyle = .none
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.styleMask.insert(.fullSizeContentView)
+            window.contentView?.wantsLayer = true
+            window.contentView?.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+            neutralizeTitlebarSafeArea(in: window)
+            window.standardWindowButton(.closeButton)?.isHidden = false
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = false
+            window.standardWindowButton(.zoomButton)?.isHidden = false
+        }
+
+        private func neutralizeTitlebarSafeArea(in window: NSWindow) {
+            guard let contentView = window.contentView else { return }
+
+            let reservedTopInset = max(0, window.frame.height - window.contentLayoutRect.height)
+            contentView.additionalSafeAreaInsets = NSEdgeInsets(
+                top: -reservedTopInset,
+                left: 0,
+                bottom: 0,
+                right: 0
+            )
+            contentView.needsLayout = true
+        }
+    }
+}
+#endif

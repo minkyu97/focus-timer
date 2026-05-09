@@ -40,8 +40,9 @@ struct TimerListOverlayView: View {
                 .opacity(store.hasRecentTimers ? 1 : 0.45)
                 .accessibilityLabel("Clear recent timers")
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
+            .padding(.leading, 18)
+            .padding(.trailing, 18)
+            .padding(.top, MainWindowScene.headerTopPadding)
             .padding(.bottom, 8)
 
             if store.sortedTimers.isEmpty {

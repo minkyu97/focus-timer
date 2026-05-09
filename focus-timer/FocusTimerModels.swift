@@ -1,5 +1,13 @@
 import SwiftUI
 
+enum MainWindowScene {
+    static let width: CGFloat = 340
+    static let originalHeight: CGFloat = 530
+    static let titlebarHeight: CGFloat = 32
+    static let height = originalHeight - titlebarHeight
+    static let headerTopPadding = titlebarHeight + 8
+}
+
 struct StoredTimer: Codable, Equatable, Identifiable {
     let durationSeconds: Int
     var isPinned: Bool
