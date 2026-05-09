@@ -3,6 +3,7 @@ import Combine
 
 #if os(macOS)
 import AppKit
+@preconcurrency import UserNotifications
 #endif
 
 enum MainWindowScene {
@@ -182,49 +183,63 @@ struct FocusTimerCompletionSoundOption: Identifiable, Equatable {
 }
 
 enum FocusTimerCompletionSound {
-    static let systemAlertID = "system-alert"
+    static let systemAlertID = "timer:Radial"
     static let customID = "custom"
     static let customFileNameDefaultsKey = "focusTimer.customCompletionSoundFileName"
 
-    private static let systemSoundNames = [
-        "Basso",
-        "Blow",
-        "Bottle",
-        "Frog",
-        "Funk",
-        "Glass",
-        "Hero",
-        "Morse",
-        "Ping",
-        "Pop",
-        "Purr",
-        "Sosumi",
-        "Submarine",
-        "Tink"
+    private static let legacySystemAlertID = "system-alert"
+
+    private static let timerSoundFiles = [
+        (name: "Radial", fileName: "Radial-EncoreInfinitum.m4r"),
+        (name: "Arpeggio", fileName: "Arpeggio-EncoreInfinitum.m4r"),
+        (name: "Breaking", fileName: "Breaking-EncoreInfinitum.m4r"),
+        (name: "Canopy", fileName: "Canopy-EncoreInfinitum.m4r"),
+        (name: "Chalet", fileName: "Chalet-EncoreInfinitum.m4r"),
+        (name: "Chirp", fileName: "Chirp-EncoreInfinitum.m4r"),
+        (name: "Daybreak", fileName: "Daybreak-EncoreInfinitum.m4r"),
+        (name: "Departure", fileName: "Departure-EncoreInfinitum.m4r"),
+        (name: "Dollop", fileName: "Dollop-EncoreInfinitum.m4r"),
+        (name: "Journey", fileName: "Journey-EncoreInfinitum.m4r"),
+        (name: "Kettle", fileName: "Kettle-EncoreInfinitum.m4r"),
+        (name: "Mercury", fileName: "Mercury-EncoreInfinitum.m4r"),
+        (name: "Milky Way", fileName: "Milky Way-EncoreInfinitum.m4r"),
+        (name: "Quad", fileName: "Quad-EncoreInfinitum.m4r"),
+        (name: "Reflection", fileName: "Reflection-EncoreInfinitum.m4r"),
+        (name: "Scavenger", fileName: "Scavenger-EncoreInfinitum.m4r"),
+        (name: "Seedling", fileName: "Seedling-EncoreInfinitum.m4r"),
+        (name: "Shelter", fileName: "Shelter-EncoreInfinitum.m4r"),
+        (name: "Sprinkles", fileName: "Sprinkles-EncoreInfinitum.m4r"),
+        (name: "Steps", fileName: "Steps-EncoreInfinitum.m4r"),
+        (name: "Storytime", fileName: "Storytime-EncoreInfinitum.m4r"),
+        (name: "Tease", fileName: "Tease-EncoreInfinitum.m4r"),
+        (name: "Tilt", fileName: "Tilt-EncoreInfinitum.m4r"),
+        (name: "Unfold", fileName: "Unfold-EncoreInfinitum.m4r"),
+        (name: "Valley", fileName: "Valley-EncoreInfinitum.m4r")
     ]
 
-    static func systemSoundID(_ name: String) -> String {
-        "system:\(name)"
+    static func timerSoundID(_ name: String) -> String {
+        "timer:\(name)"
     }
 
-    static func systemSoundName(from id: String) -> String? {
-        let prefix = "system:"
-        guard id.hasPrefix(prefix) else { return nil }
+    static func normalizedSoundID(_ id: String) -> String {
+        if id == legacySystemAlertID {
+            return systemAlertID
+        }
 
-        let name = String(id.dropFirst(prefix.count))
-        return systemSoundNames.contains(name) ? name : nil
+        if id == customID || timerSoundFileName(from: id) != nil {
+            return id
+        }
+
+        return systemAlertID
     }
 
     static func options(customSoundName: String) -> [FocusTimerCompletionSoundOption] {
-        var options = [
-            FocusTimerCompletionSoundOption(id: systemAlertID, name: "System Alert")
-        ]
-
-        options.append(
-            contentsOf: systemSoundNames.map { soundName in
-                FocusTimerCompletionSoundOption(id: systemSoundID(soundName), name: soundName)
-            }
-        )
+        var options = timerSoundFiles.map { sound in
+            FocusTimerCompletionSoundOption(
+                id: timerSoundID(sound.name),
+                name: sound.name == "Radial" ? "Radial (Default)" : sound.name
+            )
+        }
 
         if !customSoundName.isEmpty {
             options.append(FocusTimerCompletionSoundOption(id: customID, name: customSoundName))
@@ -233,7 +248,29 @@ enum FocusTimerCompletionSound {
         return options
     }
 
+    private static func timerSoundFileName(from id: String) -> String? {
+        let prefix = "timer:"
+        guard id.hasPrefix(prefix) else { return nil }
+
+        let name = String(id.dropFirst(prefix.count))
+        return timerSoundFiles.first { $0.name == name }?.fileName
+    }
+
     #if os(macOS)
+    static func timerSoundURL(from id: String) -> URL? {
+        guard let fileName = timerSoundFileName(from: normalizedSoundID(id)) else {
+            return nil
+        }
+
+        let url = URL(
+            fileURLWithPath: "/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/Ringtones",
+            isDirectory: true
+        )
+        .appendingPathComponent(fileName)
+
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     static func importCustomSound(from sourceURL: URL) throws -> String {
         let didStartAccessing = sourceURL.startAccessingSecurityScopedResource()
         defer {
@@ -385,44 +422,144 @@ final class FocusTimerAppearanceView: NSView {
 }
 
 @MainActor
-final class FocusTimerCompletionSoundPlayer {
+final class FocusTimerCompletionSoundPlayer: ObservableObject {
     static let shared = FocusTimerCompletionSoundPlayer()
 
+    @Published private(set) var isRinging = false
+
     private var activeSound: NSSound?
+    private var activePlaybackID: UUID?
 
     private init() {}
 
     func play(soundID: String) {
-        if soundID == FocusTimerCompletionSound.customID {
-            guard playCustomSound() else {
+        stop()
+
+        let normalizedSoundID = FocusTimerCompletionSound.normalizedSoundID(soundID)
+
+        if normalizedSoundID == FocusTimerCompletionSound.customID {
+            guard let sound = customSound() else {
                 NSSound.beep()
                 return
             }
 
+            play(sound)
             return
         }
 
-        guard let systemSoundName = FocusTimerCompletionSound.systemSoundName(from: soundID) else {
+        guard let timerSoundURL = FocusTimerCompletionSound.timerSoundURL(from: normalizedSoundID) else {
             NSSound.beep()
             return
         }
 
-        guard let sound = NSSound(named: NSSound.Name(systemSoundName)) else {
+        guard let sound = NSSound(contentsOf: timerSoundURL, byReference: true) else {
             NSSound.beep()
             return
         }
 
-        activeSound = sound
-        sound.play()
+        play(sound)
     }
 
-    private func playCustomSound() -> Bool {
-        guard let customSoundURL = FocusTimerCompletionSound.customSoundURL() else { return false }
-        guard FileManager.default.fileExists(atPath: customSoundURL.path) else { return false }
-        guard let sound = NSSound(contentsOf: customSoundURL, byReference: false) else { return false }
+    func stop() {
+        activeSound?.stop()
+        activeSound = nil
+        activePlaybackID = nil
+        isRinging = false
+    }
 
+    private func play(_ sound: NSSound) {
+        let playbackID = UUID()
+        activePlaybackID = playbackID
         activeSound = sound
-        return sound.play()
+
+        guard sound.play() else {
+            stop()
+            return
+        }
+
+        isRinging = true
+
+        guard sound.duration.isFinite, sound.duration > 0 else { return }
+        let playbackDuration = sound.duration + 0.15
+        DispatchQueue.main.asyncAfter(deadline: .now() + playbackDuration) { [weak self, weak sound] in
+            Task { @MainActor in
+                guard let self, let sound else { return }
+                self.finishPlaybackIfNeeded(sound, playbackID: playbackID)
+            }
+        }
+    }
+
+    private func finishPlaybackIfNeeded(_ sound: NSSound, playbackID: UUID) {
+        guard activePlaybackID == playbackID, activeSound === sound, !sound.isPlaying else { return }
+
+        activeSound = nil
+        activePlaybackID = nil
+        isRinging = false
+    }
+
+    private func customSound() -> NSSound? {
+        guard let customSoundURL = FocusTimerCompletionSound.customSoundURL() else { return nil }
+        guard FileManager.default.fileExists(atPath: customSoundURL.path) else { return nil }
+
+        return NSSound(contentsOf: customSoundURL, byReference: false)
+    }
+}
+
+enum FocusTimerCompletionNotification {
+    nonisolated static let notificationID = "focusTimer.timerComplete.notification"
+    nonisolated static let categoryID = "focusTimer.timerComplete.category"
+    nonisolated static let stopActionID = "focusTimer.timerComplete.stopRinging"
+
+    nonisolated static func configure() {
+        let stopAction = UNNotificationAction(
+            identifier: stopActionID,
+            title: "Stop Ringing",
+            options: []
+        )
+        let category = UNNotificationCategory(
+            identifier: categoryID,
+            actions: [stopAction],
+            intentIdentifiers: [],
+            options: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+
+    nonisolated static func post() {
+        let center = UNUserNotificationCenter.current()
+
+        center.getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional:
+                deliver(using: center)
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert]) { isGranted, _ in
+                    guard isGranted else { return }
+                    deliver(using: center)
+                }
+            default:
+                break
+            }
+        }
+    }
+
+    nonisolated static func clear() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [notificationID])
+        center.removeDeliveredNotifications(withIdentifiers: [notificationID])
+    }
+
+    private nonisolated static func deliver(using center: UNUserNotificationCenter) {
+        let content = UNMutableNotificationContent()
+        content.title = "Timer Finished"
+        content.body = "Click to stop ringing."
+        content.categoryIdentifier = categoryID
+        content.sound = nil
+
+        let request = UNNotificationRequest(identifier: notificationID, content: content, trigger: nil)
+        clear()
+        center.add(request)
     }
 }
 #endif

@@ -12,6 +12,7 @@ struct SettingsOverlayView: View {
     @Binding var soundEnabled: Bool
     @Binding var completionSoundID: String
     @Binding var customCompletionSoundName: String
+    @Binding var completionNotificationEnabled: Bool
     @Binding var menuBarIconEnabled: Bool
     @Binding var menuBarIconStyleID: String
     @Binding var miniWindowOpacity: Double
@@ -144,6 +145,12 @@ struct SettingsOverlayView: View {
                                 .foregroundStyle(canRemoveSelectedSound ? Color.red : Color.secondary)
                                 .opacity(canRemoveSelectedSound ? 1 : 0.28)
                             }
+
+                            Toggle(isOn: $completionNotificationEnabled) {
+                                Label("Completion Notification", systemImage: "bell")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .toggleStyle(.switch)
                         }
                     }
 
@@ -217,6 +224,9 @@ struct SettingsOverlayView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            completionSoundID = FocusTimerCompletionSound.normalizedSoundID(completionSoundID)
+        }
     }
 
     private var customColorButton: some View {

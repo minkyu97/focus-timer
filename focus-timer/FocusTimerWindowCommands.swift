@@ -3,6 +3,7 @@ import Combine
 
 #if os(macOS)
 import AppKit
+@preconcurrency import UserNotifications
 
 enum FocusTimerMainWindowPresentation: Equatable {
     case landing
@@ -57,7 +58,12 @@ struct FocusTimerWindowCommandBridge: View {
 }
 
 @MainActor
-final class FocusTimerAppDelegate: NSObject, NSApplicationDelegate {
+final class FocusTimerAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        FocusTimerCompletionNotification.configure()
+        UNUserNotificationCenter.current().delegate = self
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         guard flag else { return true }
 
@@ -66,6 +72,24 @@ final class FocusTimerAppDelegate: NSObject, NSApplicationDelegate {
 
         FocusTimerWindowCommandCenter.shared.requestMainWindow()
         return false
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        FocusTimerCompletionSoundPlayer.shared.stop()
+        FocusTimerCompletionNotification.clear()
+        completionHandler()
     }
 }
 

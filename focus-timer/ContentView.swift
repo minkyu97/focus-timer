@@ -9,6 +9,7 @@ struct ContentView: View {
     @ObservedObject var clock: FocusTimerClock
     @ObservedObject var store: TimerStore
     @ObservedObject var windowCommandCenter: FocusTimerWindowCommandCenter
+    @StateObject private var completionSoundPlayer = FocusTimerCompletionSoundPlayer.shared
 
     @Environment(\.openWindow) private var openWindow
 
@@ -18,6 +19,7 @@ struct ContentView: View {
     @AppStorage("focusTimer.soundEnabled") private var soundEnabled = true
     @AppStorage("focusTimer.completionSoundID") private var completionSoundID = FocusTimerCompletionSound.systemAlertID
     @AppStorage("focusTimer.customCompletionSoundName") private var customCompletionSoundName = ""
+    @AppStorage("focusTimer.completionNotificationEnabled") private var completionNotificationEnabled = true
     @AppStorage("focusTimer.menuBarIconEnabled") private var menuBarIconEnabled = true
     @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
@@ -32,6 +34,26 @@ struct ContentView: View {
 
     private var accentColor: Color {
         FocusTimerAccentColor.color(selectionID: accentColorID, customHex: customAccentColorHex)
+    }
+
+    private var primaryTimerButtonSystemName: String {
+        if completionSoundPlayer.isRinging {
+            return "stop.fill"
+        }
+
+        return clock.isRunning ? "pause.fill" : "play.fill"
+    }
+
+    private var primaryTimerButtonColor: Color {
+        completionSoundPlayer.isRinging ? .red : accentColor
+    }
+
+    private var primaryTimerButtonAccessibilityLabel: String {
+        if completionSoundPlayer.isRinging {
+            return "Stop ringing"
+        }
+
+        return clock.isRunning ? "Pause timer" : "Start timer"
     }
 
     var body: some View {
@@ -71,11 +93,25 @@ struct ContentView: View {
         .onChange(of: clock.completionCount) { completionCount in
             if completionCount > 0, soundEnabled {
                 playCompletionSound()
+
+                if completionNotificationEnabled {
+                    FocusTimerCompletionNotification.post()
+                }
             }
         }
         .onChange(of: clock.remainingSeconds) { remainingSeconds in
             guard !isEditingTimeText else { return }
             timeText = FocusTimerFormatting.clock(remainingSeconds)
+        }
+        .onChange(of: soundEnabled) { isEnabled in
+            if !isEnabled {
+                stopRinging()
+            }
+        }
+        .onChange(of: completionNotificationEnabled) { isEnabled in
+            if !isEnabled {
+                FocusTimerCompletionNotification.clear()
+            }
         }
         .onAppear {
             timeText = FocusTimerFormatting.clock(clock.remainingSeconds)
@@ -138,6 +174,7 @@ struct ContentView: View {
                             return
                         }
 
+                        stopRinging()
                         clock.setDuration(seconds)
                     }
                 )
@@ -186,6 +223,7 @@ struct ContentView: View {
                         accessibilityLabel: "Decrease by five minutes",
                         action: {
                             finishTimeEditing()
+                            stopRinging()
                             clock.adjustDuration(by: -5 * 60)
                         }
                     )
@@ -197,6 +235,7 @@ struct ContentView: View {
                         accessibilityLabel: "Reset timer",
                         action: {
                             finishTimeEditing()
+                            stopRinging()
                             clock.reset()
                         }
                     )
@@ -204,22 +243,24 @@ struct ContentView: View {
                     Button {
                         finishTimeEditing()
 
-                        if clock.isRunning {
+                        if completionSoundPlayer.isRinging {
+                            stopRinging()
+                        } else if clock.isRunning {
                             clock.pause()
                         } else {
                             store.recordUse(durationSeconds: clock.selectedSeconds)
                             clock.start()
                         }
                     } label: {
-                        Image(systemName: clock.isRunning ? "pause.fill" : "play.fill")
+                        Image(systemName: primaryTimerButtonSystemName)
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 58, height: 58)
-                            .background(accentColor, in: Circle())
-                            .shadow(color: accentColor.opacity(0.28), radius: 10, y: 4)
+                            .background(primaryTimerButtonColor, in: Circle())
+                            .shadow(color: primaryTimerButtonColor.opacity(0.28), radius: 10, y: 4)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(clock.isRunning ? "Pause timer" : "Start timer")
+                    .accessibilityLabel(primaryTimerButtonAccessibilityLabel)
 
                     IconCircleButton(
                         systemName: "macwindow",
@@ -235,6 +276,7 @@ struct ContentView: View {
                         accessibilityLabel: "Increase by five minutes",
                         action: {
                             finishTimeEditing()
+                            stopRinging()
                             clock.adjustDuration(by: 5 * 60)
                         }
                     )
@@ -257,6 +299,7 @@ struct ContentView: View {
                 store: store,
                 accentColor: accentColor,
                 onSelect: { timer in
+                    stopRinging()
                     clock.setDuration(timer.durationSeconds)
                     store.recordUse(durationSeconds: timer.durationSeconds)
                     overlayScreen = nil
@@ -275,6 +318,7 @@ struct ContentView: View {
                 soundEnabled: $soundEnabled,
                 completionSoundID: $completionSoundID,
                 customCompletionSoundName: $customCompletionSoundName,
+                completionNotificationEnabled: $completionNotificationEnabled,
                 menuBarIconEnabled: $menuBarIconEnabled,
                 menuBarIconStyleID: $menuBarIconStyleID,
                 miniWindowOpacity: $miniWindowOpacity,
@@ -290,7 +334,14 @@ struct ContentView: View {
 
     private func playCompletionSound() {
         #if os(macOS)
-        FocusTimerCompletionSoundPlayer.shared.play(soundID: completionSoundID)
+        completionSoundPlayer.play(soundID: completionSoundID)
+        #endif
+    }
+
+    private func stopRinging() {
+        #if os(macOS)
+        completionSoundPlayer.stop()
+        FocusTimerCompletionNotification.clear()
         #endif
     }
 
@@ -355,6 +406,7 @@ struct ContentView: View {
         }
 
         clock.setDuration(seconds)
+        stopRinging()
         timeText = FocusTimerFormatting.clock(clock.remainingSeconds)
     }
 
