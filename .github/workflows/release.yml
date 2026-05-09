@@ -1,16 +1,13 @@
 name: Release Deploy
 
 on:
-  push:
-    tags:
-      - "v*"
   release:
     types:
       - published
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create or update"
+        description: "Existing release tag to build"
         required: true
         type: string
 
@@ -28,14 +25,9 @@ jobs:
       CONFIGURATION: Release
       APP_NAME: Focus Timer
       ASSET_NAME: Focus-Timer-macOS.app.zip
+      CODE_SIGN_IDENTITY: Developer ID Application
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Show Xcode version
-        run: xcodebuild -version
-
       - name: Resolve release tag
         id: release_tag
         shell: bash
@@ -44,8 +36,6 @@ jobs:
 
           if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
             tag="${{ github.event.release.tag_name }}"
-          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            tag="${GITHUB_REF_NAME}"
           else
             tag="${{ inputs.tag }}"
           fi
@@ -57,7 +47,77 @@ jobs:
 
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release_tag.outputs.tag }}
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Validate signing and notarization secrets
+        env:
+          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=()
+
+          [[ -n "$DEVELOPER_ID_CERTIFICATE_BASE64" ]] || missing+=("DEVELOPER_ID_CERTIFICATE_BASE64")
+          [[ -n "$DEVELOPER_ID_CERTIFICATE_PASSWORD" ]] || missing+=("DEVELOPER_ID_CERTIFICATE_PASSWORD")
+          [[ -n "$APPLE_ID" ]] || missing+=("APPLE_ID")
+          [[ -n "$APPLE_TEAM_ID" ]] || missing+=("APPLE_TEAM_ID")
+          [[ -n "$APPLE_APP_SPECIFIC_PASSWORD" ]] || missing+=("APPLE_APP_SPECIFIC_PASSWORD")
+
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required GitHub secret: %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
+      - name: Import Developer ID certificate
+        env:
+          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
+          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
+          keychain_password="$(uuidgen)"
+
+          echo "$DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+
+          security import "$certificate_path" \
+            -P "$DEVELOPER_ID_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+
+          security list-keychains -d user -s "$keychain_path"
+          security default-keychain -d user -s "$keychain_path"
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+
+          security find-identity -v -p codesigning "$keychain_path"
+
       - name: Build Release app
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         shell: bash
         run: |
           set -euo pipefail
@@ -68,26 +128,82 @@ jobs:
             -configuration "$CONFIGURATION" \
             -sdk macosx \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            ENABLE_HARDENED_RUNTIME=YES \
+            OTHER_CODE_SIGN_FLAGS="--timestamp" \
             build
 
-      - name: Package .app bundle
-        id: package
+      - name: Locate built app
+        id: app
         shell: bash
         run: |
           set -euo pipefail
 
           app_path="$RUNNER_TEMP/DerivedData/Build/Products/$CONFIGURATION/$APP_NAME.app"
-          output_dir="$RUNNER_TEMP/release"
-          asset_path="$output_dir/$ASSET_NAME"
 
           if [[ ! -d "$app_path" ]]; then
             echo "Expected app bundle was not found: $app_path" >&2
-            find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 3 -name "*.app" -print >&2 || true
+            find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 4 -name "*.app" -print >&2 || true
             exit 1
           fi
 
+          echo "app_path=$app_path" >> "$GITHUB_OUTPUT"
+
+      - name: Verify code signature
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="${{ steps.app.outputs.app_path }}"
+
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          codesign --display --verbose=4 "$app_path"
+
+      - name: Notarize and staple app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="${{ steps.app.outputs.app_path }}"
+          notary_zip="$RUNNER_TEMP/$APP_NAME-notary.zip"
+
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$notary_zip"
+
+          xcrun notarytool submit "$notary_zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+
+          xcrun stapler staple "$app_path"
+          xcrun stapler validate "$app_path"
+
+          spctl --assess --type execute --verbose=4 "$app_path"
+
+      - name: Package notarized app bundle
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="${{ steps.app.outputs.app_path }}"
+          output_dir="$RUNNER_TEMP/release"
+          asset_path="$output_dir/$ASSET_NAME"
+
           mkdir -p "$output_dir"
+
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          xcrun stapler validate "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+
           ditto -c -k --sequesterRsrc --keepParent "$app_path" "$asset_path"
 
           echo "asset_path=$asset_path" >> "$GITHUB_OUTPUT"
@@ -114,5 +230,5 @@ jobs:
             gh release create "$TAG_NAME" "$ASSET_PATH" \
               --title "$TAG_NAME" \
               --notes "Release $TAG_NAME" \
-              --target "$GITHUB_SHA"
+              --verify-tag
           fi
