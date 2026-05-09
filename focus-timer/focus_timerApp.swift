@@ -11,9 +11,11 @@ import SwiftUI
 struct focus_timerApp: App {
     @StateObject private var clock = FocusTimerClock()
     @StateObject private var store = TimerStore()
+    @StateObject private var systemAppearance = FocusTimerSystemAppearance()
 
     @AppStorage("focusTimer.accentColorID") private var accentColorID = FocusTimerTheme.tomato.rawValue
     @AppStorage("focusTimer.customAccentColorHex") private var customAccentColorHex = ""
+    @AppStorage("focusTimer.appearanceModeID") private var appearanceModeID = FocusTimerAppearanceMode.system.rawValue
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
     @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
 
@@ -21,9 +23,18 @@ struct focus_timerApp: App {
         FocusTimerAccentColor.color(selectionID: accentColorID, customHex: customAccentColorHex)
     }
 
+    private var appearanceMode: FocusTimerAppearanceMode {
+        FocusTimerAppearanceMode.resolved(from: appearanceModeID)
+    }
+
+    private var preferredColorScheme: ColorScheme {
+        appearanceMode.resolvedColorScheme(systemColorScheme: systemAppearance.colorScheme)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView(clock: clock, store: store)
+                .preferredColorScheme(preferredColorScheme)
         }
         .defaultSize(width: MainWindowScene.width, height: MainWindowScene.height)
         .windowResizability(.contentSize)
@@ -34,8 +45,10 @@ struct focus_timerApp: App {
                 clock: clock,
                 accentColor: accentColor,
                 windowOpacity: miniWindowOpacity,
-                clickThroughEnabled: miniWindowClickThrough
+                clickThroughEnabled: miniWindowClickThrough,
+                appearanceModeID: appearanceModeID
             )
+            .preferredColorScheme(preferredColorScheme)
         }
         .defaultSize(width: MiniTimerWindowScene.width, height: MiniTimerWindowScene.height)
         .windowResizability(.contentSize)

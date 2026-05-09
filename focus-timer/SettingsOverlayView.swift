@@ -7,6 +7,7 @@ import AppKit
 struct SettingsOverlayView: View {
     @Binding var accentColorID: String
     @Binding var customAccentColorHex: String
+    @Binding var appearanceModeID: String
     @Binding var soundEnabled: Bool
     @Binding var miniWindowOpacity: Double
     @Binding var miniWindowClickThrough: Bool
@@ -67,6 +68,21 @@ struct SettingsOverlayView: View {
 
                                 customColorButton
                             }
+                        }
+                    }
+
+                    settingsGroup {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Appearance", systemImage: "circle.lefthalf.filled")
+                                .font(.system(size: 14, weight: .medium))
+
+                            Picker("Appearance", selection: $appearanceModeID) {
+                                ForEach(FocusTimerAppearanceMode.allCases) { mode in
+                                    Text(mode.name).tag(mode.rawValue)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
                         }
                     }
 

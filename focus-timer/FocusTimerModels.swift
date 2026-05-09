@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 #if os(macOS)
 import AppKit
@@ -106,6 +107,142 @@ enum FocusTimerAccentColor {
             .replacingOccurrences(of: "#", with: "")
     }
 }
+
+enum FocusTimerAppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case dark
+    case white
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .system:
+            return "System"
+        case .dark:
+            return "Dark"
+        case .white:
+            return "White"
+        }
+    }
+
+    static func resolved(from rawValue: String) -> FocusTimerAppearanceMode {
+        FocusTimerAppearanceMode(rawValue: rawValue) ?? .system
+    }
+
+    func resolvedColorScheme(systemColorScheme: ColorScheme) -> ColorScheme {
+        switch self {
+        case .system:
+            return systemColorScheme
+        case .dark:
+            return .dark
+        case .white:
+            return .light
+        }
+    }
+
+    #if os(macOS)
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system:
+            return nil
+        case .dark:
+            return NSAppearance(named: .darkAqua)
+        case .white:
+            return NSAppearance(named: .aqua)
+        }
+    }
+    #endif
+}
+
+#if os(macOS)
+@MainActor
+final class FocusTimerSystemAppearance: ObservableObject {
+    @Published private(set) var colorScheme = FocusTimerSystemAppearance.currentColorScheme()
+
+    private var observers: [NSObjectProtocol] = []
+
+    init() {
+        observers = [
+            DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                let observer = self
+                Task { @MainActor in
+                    observer?.refresh()
+                }
+            },
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                let observer = self
+                Task { @MainActor in
+                    observer?.refresh()
+                }
+            }
+        ]
+    }
+
+    deinit {
+        observers.forEach { observer in
+            DistributedNotificationCenter.default().removeObserver(observer)
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func refresh() {
+        let latestColorScheme = FocusTimerSystemAppearance.currentColorScheme()
+        guard colorScheme != latestColorScheme else { return }
+
+        colorScheme = latestColorScheme
+    }
+
+    private static func currentColorScheme() -> ColorScheme {
+        let bestMatch = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+        return bestMatch == .darkAqua ? .dark : .light
+    }
+}
+
+enum FocusTimerWindowAppearance {
+    static func apply(modeID: String, to window: NSWindow) {
+        let appearance = FocusTimerAppearanceMode.resolved(from: modeID).nsAppearance
+        window.appearance = appearance
+        window.contentView?.appearance = appearance
+
+        if let appearance {
+            appearance.performAsCurrentDrawingAppearance {
+                updateBackground(for: window)
+            }
+        } else {
+            updateBackground(for: window)
+        }
+    }
+
+    private static func updateBackground(for window: NSWindow) {
+        window.backgroundColor = .windowBackgroundColor
+        window.contentView?.layer?.backgroundColor = nil
+        window.contentView?.needsDisplay = true
+    }
+}
+
+final class FocusTimerAppearanceView: NSView {
+    var onWindowOrAppearanceChange: ((FocusTimerAppearanceView) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowOrAppearanceChange?(self)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onWindowOrAppearanceChange?(self)
+    }
+}
+#endif
 
 enum FocusTimerFormatting {
     static func clock(_ totalSeconds: Int) -> String {

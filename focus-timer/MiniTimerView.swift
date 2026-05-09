@@ -17,6 +17,7 @@ struct MiniTimerView: View {
     let accentColor: Color
     let windowOpacity: Double
     let clickThroughEnabled: Bool
+    let appearanceModeID: String
 
     var body: some View {
         VStack(spacing: 6) {
@@ -53,7 +54,8 @@ struct MiniTimerView: View {
             MiniTimerWindowConfigurator(
                 opacity: windowOpacity,
                 clickThroughEnabled: clickThroughEnabled,
-                dragStripHeight: MiniTimerWindowScene.dragStripHitHeight
+                dragStripHeight: MiniTimerWindowScene.dragStripHitHeight,
+                appearanceModeID: appearanceModeID
             )
             .frame(width: 0, height: 0)
             .allowsHitTesting(false)
@@ -78,28 +80,52 @@ private struct MiniTimerWindowConfigurator: NSViewRepresentable {
     let opacity: Double
     let clickThroughEnabled: Bool
     let dragStripHeight: CGFloat
+    let appearanceModeID: String
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+        let view = FocusTimerAppearanceView()
+        view.onWindowOrAppearanceChange = { view in
+            context.coordinator.update(
+                from: view,
+                opacity: opacity,
+                clickThroughEnabled: clickThroughEnabled,
+                dragStripHeight: dragStripHeight,
+                appearanceModeID: appearanceModeID
+            )
+        }
         context.coordinator.update(
             from: view,
             opacity: opacity,
             clickThroughEnabled: clickThroughEnabled,
-            dragStripHeight: dragStripHeight
+            dragStripHeight: dragStripHeight,
+            appearanceModeID: appearanceModeID
         )
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
+        if let nsView = nsView as? FocusTimerAppearanceView {
+            nsView.onWindowOrAppearanceChange = { view in
+                context.coordinator.update(
+                    from: view,
+                    opacity: opacity,
+                    clickThroughEnabled: clickThroughEnabled,
+                    dragStripHeight: dragStripHeight,
+                    appearanceModeID: appearanceModeID
+                )
+            }
+        }
+
         context.coordinator.update(
             from: nsView,
             opacity: opacity,
             clickThroughEnabled: clickThroughEnabled,
-            dragStripHeight: dragStripHeight
+            dragStripHeight: dragStripHeight,
+            appearanceModeID: appearanceModeID
         )
     }
 
@@ -118,7 +144,8 @@ private struct MiniTimerWindowConfigurator: NSViewRepresentable {
             from view: NSView,
             opacity: Double,
             clickThroughEnabled: Bool,
-            dragStripHeight: CGFloat
+            dragStripHeight: CGFloat,
+            appearanceModeID: String
         ) {
             self.opacity = opacity
             self.clickThroughEnabled = clickThroughEnabled
@@ -131,14 +158,15 @@ private struct MiniTimerWindowConfigurator: NSViewRepresentable {
                         from: view,
                         opacity: opacity,
                         clickThroughEnabled: clickThroughEnabled,
-                        dragStripHeight: dragStripHeight
+                        dragStripHeight: dragStripHeight,
+                        appearanceModeID: appearanceModeID
                     )
                 }
                 return
             }
 
             self.window = window
-            configure(window)
+            configure(window, appearanceModeID: appearanceModeID)
 
             if clickThroughEnabled {
                 installMonitors()
@@ -155,19 +183,18 @@ private struct MiniTimerWindowConfigurator: NSViewRepresentable {
             window?.ignoresMouseEvents = false
         }
 
-        private func configure(_ window: NSWindow) {
+        private func configure(_ window: NSWindow, appearanceModeID: String) {
             window.level = .floating
             window.collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
             window.isMovableByWindowBackground = true
             window.acceptsMouseMovedEvents = true
             window.alphaValue = CGFloat(min(max(opacity, 0.35), 1))
-            window.backgroundColor = .windowBackgroundColor
+            FocusTimerWindowAppearance.apply(modeID: appearanceModeID, to: window)
             window.titlebarSeparatorStyle = .none
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             window.contentView?.wantsLayer = true
-            window.contentView?.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             neutralizeTitlebarSafeArea(in: window)
             window.standardWindowButton(.closeButton)?.isHidden = false
             window.standardWindowButton(.miniaturizeButton)?.isHidden = false

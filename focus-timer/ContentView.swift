@@ -13,6 +13,7 @@ struct ContentView: View {
 
     @AppStorage("focusTimer.accentColorID") private var accentColorID = FocusTimerTheme.tomato.rawValue
     @AppStorage("focusTimer.customAccentColorHex") private var customAccentColorHex = ""
+    @AppStorage("focusTimer.appearanceModeID") private var appearanceModeID = FocusTimerAppearanceMode.system.rawValue
     @AppStorage("focusTimer.soundEnabled") private var soundEnabled = true
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
     @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
@@ -42,7 +43,7 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             #if os(macOS)
-            MainWindowConfigurator()
+            MainWindowConfigurator(appearanceModeID: appearanceModeID)
                 .frame(width: 0, height: 0)
                 .allowsHitTesting(false)
             #endif
@@ -246,6 +247,7 @@ struct ContentView: View {
             SettingsOverlayView(
                 accentColorID: $accentColorID,
                 customAccentColorHex: $customAccentColorHex,
+                appearanceModeID: $appearanceModeID,
                 soundEnabled: $soundEnabled,
                 miniWindowOpacity: $miniWindowOpacity,
                 miniWindowClickThrough: $miniWindowClickThrough,
@@ -327,14 +329,25 @@ private enum OverlayScreen: Equatable {
 
 #if os(macOS)
 private struct MainWindowConfigurator: NSViewRepresentable {
+    let appearanceModeID: String
+
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        context.coordinator.update(from: view)
+        let view = FocusTimerAppearanceView()
+        view.onWindowOrAppearanceChange = { view in
+            context.coordinator.update(from: view, appearanceModeID: appearanceModeID)
+        }
+        context.coordinator.update(from: view, appearanceModeID: appearanceModeID)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.update(from: nsView)
+        if let nsView = nsView as? FocusTimerAppearanceView {
+            nsView.onWindowOrAppearanceChange = { view in
+                context.coordinator.update(from: view, appearanceModeID: appearanceModeID)
+            }
+        }
+
+        context.coordinator.update(from: nsView, appearanceModeID: appearanceModeID)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -342,27 +355,26 @@ private struct MainWindowConfigurator: NSViewRepresentable {
     }
 
     final class Coordinator {
-        func update(from view: NSView) {
+        func update(from view: NSView, appearanceModeID: String) {
             guard let window = view.window else {
                 DispatchQueue.main.async { [weak self, weak view] in
                     guard let self, let view else { return }
-                    self.update(from: view)
+                    self.update(from: view, appearanceModeID: appearanceModeID)
                 }
                 return
             }
 
-            configure(window)
+            configure(window, appearanceModeID: appearanceModeID)
         }
 
-        private func configure(_ window: NSWindow) {
+        private func configure(_ window: NSWindow, appearanceModeID: String) {
             window.isMovableByWindowBackground = false
-            window.backgroundColor = .windowBackgroundColor
+            FocusTimerWindowAppearance.apply(modeID: appearanceModeID, to: window)
             window.titlebarSeparatorStyle = .none
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             window.contentView?.wantsLayer = true
-            window.contentView?.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             neutralizeTitlebarSafeArea(in: window)
             window.standardWindowButton(.closeButton)?.isHidden = false
             window.standardWindowButton(.miniaturizeButton)?.isHidden = false
