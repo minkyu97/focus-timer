@@ -1,7 +1,12 @@
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 struct SettingsOverlayView: View {
     @Binding var accentColorID: String
+    @Binding var customAccentColorHex: String
     @Binding var soundEnabled: Bool
     @Binding var miniWindowOpacity: Double
     @Binding var miniWindowClickThrough: Bool
@@ -10,8 +15,20 @@ struct SettingsOverlayView: View {
 
     let onClose: () -> Void
 
-    private var selectedTheme: FocusTimerTheme {
-        FocusTimerTheme(rawValue: accentColorID) ?? .tomato
+    private var selectedTheme: FocusTimerTheme? {
+        FocusTimerTheme(rawValue: accentColorID)
+    }
+
+    private var selectedAccentColor: Color {
+        FocusTimerAccentColor.color(selectionID: accentColorID, customHex: customAccentColorHex)
+    }
+
+    private var customAccentColor: Color? {
+        FocusTimerAccentColor.customColor(from: customAccentColorHex)
+    }
+
+    private var isCustomColorSelected: Bool {
+        accentColorID == FocusTimerAccentColor.customID && customAccentColor != nil
     }
 
     var body: some View {
@@ -47,6 +64,8 @@ struct SettingsOverlayView: View {
                                     .buttonStyle(.plain)
                                     .accessibilityLabel(theme.name)
                                 }
+
+                                customColorButton
                             }
                         }
                     }
@@ -74,7 +93,7 @@ struct SettingsOverlayView: View {
                             }
 
                             Slider(value: $miniWindowOpacity, in: 0.35...1, step: 0.05)
-                                .tint(selectedTheme.color)
+                                .tint(selectedAccentColor)
                         }
                     }
 
@@ -111,6 +130,56 @@ struct SettingsOverlayView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private var customColorButton: some View {
+        Button {
+            if customAccentColor != nil {
+                accentColorID = FocusTimerAccentColor.customID
+            }
+
+            showCustomColorPicker()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(customAccentColor ?? Color.clear)
+                    .frame(width: 34, height: 34)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(
+                                isCustomColorSelected ? Color.primary.opacity(0.72) : Color.primary.opacity(0.26),
+                                lineWidth: isCustomColorSelected ? 2 : 1
+                            )
+                    }
+
+                Image(systemName: "pencil.circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(customAccentColor == nil ? Color.secondary : Color.white)
+                    .shadow(
+                        color: customAccentColor == nil ? Color.clear : Color.black.opacity(0.38),
+                        radius: 2,
+                        y: 1
+                    )
+            }
+            .frame(width: 42, height: 42)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Custom disk color")
+    }
+
+    private func showCustomColorPicker() {
+        #if os(macOS)
+        let initialColor = FocusTimerAccentColor.nsColor(fromHex: customAccentColorHex)
+            ?? FocusTimerAccentColor.nsColor(from: selectedAccentColor)
+            ?? .systemRed
+
+        CustomAccentColorPanelController.shared.show(initialColor: initialColor) { color in
+            guard let hexString = FocusTimerAccentColor.hexString(from: color) else { return }
+
+            customAccentColorHex = hexString
+            accentColorID = FocusTimerAccentColor.customID
+        }
+        #endif
+    }
+
     @ViewBuilder
     private func settingsGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
@@ -126,3 +195,28 @@ struct SettingsOverlayView: View {
             )
     }
 }
+
+#if os(macOS)
+private final class CustomAccentColorPanelController: NSObject {
+    static let shared = CustomAccentColorPanelController()
+
+    private var onColorChange: ((NSColor) -> Void)?
+
+    func show(initialColor: NSColor, onChange: @escaping (NSColor) -> Void) {
+        onColorChange = onChange
+
+        let panel = NSColorPanel.shared
+        panel.showsAlpha = false
+        panel.isContinuous = true
+        panel.color = initialColor
+        panel.setTarget(self)
+        panel.setAction(#selector(colorDidChange(_:)))
+        panel.orderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func colorDidChange(_ sender: NSColorPanel) {
+        onColorChange?(sender.color)
+    }
+}
+#endif

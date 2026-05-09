@@ -12,6 +12,7 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
 
     @AppStorage("focusTimer.accentColorID") private var accentColorID = FocusTimerTheme.tomato.rawValue
+    @AppStorage("focusTimer.customAccentColorHex") private var customAccentColorHex = ""
     @AppStorage("focusTimer.soundEnabled") private var soundEnabled = true
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
     @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
@@ -21,8 +22,9 @@ struct ContentView: View {
     @State private var isEditingTimeText = false
     @State private var editingStartedText: String?
     @FocusState private var isTimeFieldFocused: Bool
-    private var theme: FocusTimerTheme {
-        FocusTimerTheme(rawValue: accentColorID) ?? .tomato
+
+    private var accentColor: Color {
+        FocusTimerAccentColor.color(selectionID: accentColorID, customHex: customAccentColorHex)
     }
 
     var body: some View {
@@ -103,7 +105,7 @@ struct ContentView: View {
                 TimerDiskView(
                     remainingSeconds: clock.remainingSeconds,
                     selectedSeconds: clock.selectedSeconds,
-                    accentColor: theme.color,
+                    accentColor: accentColor,
                     isRunning: clock.isRunning,
                     onDurationChange: { seconds in
                         guard !isEditingTimeText else {
@@ -188,8 +190,8 @@ struct ContentView: View {
                             .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 58, height: 58)
-                            .background(theme.color, in: Circle())
-                            .shadow(color: theme.color.opacity(0.28), radius: 10, y: 4)
+                            .background(accentColor, in: Circle())
+                            .shadow(color: accentColor.opacity(0.28), radius: 10, y: 4)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(clock.isRunning ? "Pause timer" : "Start timer")
@@ -228,7 +230,7 @@ struct ContentView: View {
         case .timers:
             TimerListOverlayView(
                 store: store,
-                accentColor: theme.color,
+                accentColor: accentColor,
                 onSelect: { timer in
                     clock.setDuration(timer.durationSeconds)
                     store.recordUse(durationSeconds: timer.durationSeconds)
@@ -243,6 +245,7 @@ struct ContentView: View {
         case .settings:
             SettingsOverlayView(
                 accentColorID: $accentColorID,
+                customAccentColorHex: $customAccentColorHex,
                 soundEnabled: $soundEnabled,
                 miniWindowOpacity: $miniWindowOpacity,
                 miniWindowClickThrough: $miniWindowClickThrough,

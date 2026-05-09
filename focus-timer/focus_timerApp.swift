@@ -13,11 +13,12 @@ struct focus_timerApp: App {
     @StateObject private var store = TimerStore()
 
     @AppStorage("focusTimer.accentColorID") private var accentColorID = FocusTimerTheme.tomato.rawValue
+    @AppStorage("focusTimer.customAccentColorHex") private var customAccentColorHex = ""
     @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
     @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
 
-    private var theme: FocusTimerTheme {
-        FocusTimerTheme(rawValue: accentColorID) ?? .tomato
+    private var accentColor: Color {
+        FocusTimerAccentColor.color(selectionID: accentColorID, customHex: customAccentColorHex)
     }
 
     var body: some Scene {
@@ -31,7 +32,7 @@ struct focus_timerApp: App {
         Window("Mini Timer", id: MiniTimerWindowScene.id) {
             MiniTimerView(
                 clock: clock,
-                accentColor: theme.color,
+                accentColor: accentColor,
                 windowOpacity: miniWindowOpacity,
                 clickThroughEnabled: miniWindowClickThrough
             )

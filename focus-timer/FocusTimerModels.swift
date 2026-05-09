@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 enum MainWindowScene {
     static let width: CGFloat = 340
     static let originalHeight: CGFloat = 530
@@ -48,6 +52,58 @@ enum FocusTimerTheme: String, CaseIterable, Identifiable {
         case .sky:
             return Color(red: 0.14, green: 0.45, blue: 0.82)
         }
+    }
+}
+
+enum FocusTimerAccentColor {
+    static let customID = "custom"
+
+    static func color(selectionID: String, customHex: String) -> Color {
+        if selectionID == customID, let customColor = customColor(from: customHex) {
+            return customColor
+        }
+
+        return (FocusTimerTheme(rawValue: selectionID) ?? .tomato).color
+    }
+
+    static func customColor(from hex: String) -> Color? {
+        let normalizedHex = normalizedHexString(hex)
+        guard normalizedHex.count == 6, let value = UInt64(normalizedHex, radix: 16) else {
+            return nil
+        }
+
+        return Color(
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255
+        )
+    }
+
+    #if os(macOS)
+    static func nsColor(from color: Color) -> NSColor? {
+        NSColor(color).usingColorSpace(.sRGB)
+    }
+
+    static func nsColor(fromHex hex: String) -> NSColor? {
+        guard let color = customColor(from: hex) else { return nil }
+        return nsColor(from: color)
+    }
+
+    static func hexString(from color: NSColor) -> String? {
+        guard let rgbColor = color.usingColorSpace(.sRGB) else { return nil }
+
+        let red = Int(round(rgbColor.redComponent * 255))
+        let green = Int(round(rgbColor.greenComponent * 255))
+        let blue = Int(round(rgbColor.blueComponent * 255))
+
+        return String(format: "#%02X%02X%02X", red, green, blue)
+    }
+    #endif
+
+    private static func normalizedHexString(_ hex: String) -> String {
+        hex
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
     }
 }
 
