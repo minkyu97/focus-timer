@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct TimerListOverlayView: View {
+struct SavedTimersOverlayView: View {
     @ObservedObject var store: TimerStore
 
     let accentColor: Color
@@ -22,7 +22,7 @@ struct TimerListOverlayView: View {
                     action: onClose
                 )
 
-                Text("Timers")
+                Text("Saved Timers")
                     .font(.system(size: 15, weight: .semibold))
 
                 Spacer()

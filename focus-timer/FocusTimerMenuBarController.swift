@@ -7,7 +7,7 @@ struct FocusTimerMenuBarBridge: View {
     let store: TimerStore
     let isEnabled: Bool
     let styleID: String
-    let onOpenMiniTimer: () -> Void
+    let onOpenFloatingTimer: () -> Void
     let onOpenSettings: () -> Void
 
     var body: some View {
@@ -27,7 +27,7 @@ struct FocusTimerMenuBarBridge: View {
             store: store,
             isEnabled: isEnabled,
             styleID: styleID,
-            onOpenMiniTimer: onOpenMiniTimer,
+            onOpenFloatingTimer: onOpenFloatingTimer,
             onOpenSettings: onOpenSettings
         )
     }
@@ -44,7 +44,7 @@ final class FocusTimerMenuBarController: NSObject {
     private var statusItem: NSStatusItem?
     private var clockCancellable: AnyCancellable?
     private var renderedState: RenderedState?
-    private var onOpenMiniTimer: (() -> Void)?
+    private var onOpenFloatingTimer: (() -> Void)?
     private var onOpenSettings: (() -> Void)?
 
     private override init() {
@@ -56,7 +56,7 @@ final class FocusTimerMenuBarController: NSObject {
         store: TimerStore,
         isEnabled: Bool,
         styleID: String,
-        onOpenMiniTimer: @escaping () -> Void,
+        onOpenFloatingTimer: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void
     ) {
         let clockChanged = self.clock !== clock
@@ -64,7 +64,7 @@ final class FocusTimerMenuBarController: NSObject {
         self.store = store
         self.isEnabled = isEnabled
         self.styleID = styleID
-        self.onOpenMiniTimer = onOpenMiniTimer
+        self.onOpenFloatingTimer = onOpenFloatingTimer
         self.onOpenSettings = onOpenSettings
 
         if clockChanged {
@@ -174,15 +174,15 @@ final class FocusTimerMenuBarController: NSObject {
 
         menu.addItem(.separator())
 
-        let miniWindowItem = NSMenuItem(
-            title: "Open Mini Window",
-            action: #selector(openMiniTimer),
+        let floatingTimerItem = NSMenuItem(
+            title: "Open Floating Timer",
+            action: #selector(openFloatingTimer),
             keyEquivalent: ""
         )
-        miniWindowItem.target = self
-        miniWindowItem.image = symbolImage("macwindow")
-        miniWindowItem.isEnabled = onOpenMiniTimer != nil
-        menu.addItem(miniWindowItem)
+        floatingTimerItem.target = self
+        floatingTimerItem.image = symbolImage("macwindow")
+        floatingTimerItem.isEnabled = onOpenFloatingTimer != nil
+        menu.addItem(floatingTimerItem)
 
         let settingsItem = NSMenuItem(
             title: "Open Settings",
@@ -232,8 +232,8 @@ final class FocusTimerMenuBarController: NSObject {
         refresh(force: true)
     }
 
-    @objc private func openMiniTimer() {
-        onOpenMiniTimer?()
+    @objc private func openFloatingTimer() {
+        onOpenFloatingTimer?()
     }
 
     @objc private func openSettings() {

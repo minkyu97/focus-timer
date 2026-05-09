@@ -177,6 +177,29 @@ enum FocusTimerMenuBarIconStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum FocusTimerPreferenceMigration {
+    static func migrateLegacyKeys() {
+        let userDefaults = UserDefaults.standard
+        migrateValue(
+            from: "focusTimer.miniWindowOpacity",
+            to: "focusTimer.floatingTimerOpacity",
+            in: userDefaults
+        )
+        migrateValue(
+            from: "focusTimer.miniWindowClickThrough",
+            to: "focusTimer.floatingTimerClickThrough",
+            in: userDefaults
+        )
+    }
+
+    private static func migrateValue(from legacyKey: String, to currentKey: String, in userDefaults: UserDefaults) {
+        guard userDefaults.object(forKey: currentKey) == nil else { return }
+        guard let value = userDefaults.object(forKey: legacyKey) else { return }
+
+        userDefaults.set(value, forKey: currentKey)
+    }
+}
+
 struct FocusTimerCompletionSoundOption: Identifiable, Equatable {
     let id: String
     let name: String

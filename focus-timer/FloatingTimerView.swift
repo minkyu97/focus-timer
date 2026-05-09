@@ -4,14 +4,14 @@ import SwiftUI
 import AppKit
 #endif
 
-enum MiniTimerWindowScene {
-    static let id = "mini-timer"
+enum FloatingTimerWindowScene {
+    static let id = "floating-timer"
     static let width: CGFloat = 198
     static let height: CGFloat = 224
     static let dragStripHitHeight: CGFloat = 32
 }
 
-struct MiniTimerView: View {
+struct FloatingTimerView: View {
     @ObservedObject var clock: FocusTimerClock
     @ObservedObject var store: TimerStore
     @ObservedObject var windowCommandCenter: FocusTimerWindowCommandCenter
@@ -28,7 +28,7 @@ struct MiniTimerView: View {
     var body: some View {
         VStack(spacing: 6) {
             #if os(macOS)
-            MiniTimerDragStrip()
+            FloatingTimerDragStrip()
                 .frame(height: 24)
             #else
             Color.clear
@@ -53,15 +53,15 @@ struct MiniTimerView: View {
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 6)
-        .frame(width: MiniTimerWindowScene.width, height: MiniTimerWindowScene.height)
+        .frame(width: FloatingTimerWindowScene.width, height: FloatingTimerWindowScene.height)
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea(edges: .top))
         .ignoresSafeArea(edges: .top)
         .overlay {
             ZStack {
-                MiniTimerWindowConfigurator(
+                FloatingTimerWindowConfigurator(
                     opacity: windowOpacity,
                     clickThroughEnabled: clickThroughEnabled,
-                    dragStripHeight: MiniTimerWindowScene.dragStripHitHeight,
+                    dragStripHeight: FloatingTimerWindowScene.dragStripHitHeight,
                     appearanceModeID: appearanceModeID
                 )
                 FocusTimerWindowCommandBridge(commandCenter: windowCommandCenter)
@@ -71,7 +71,7 @@ struct MiniTimerView: View {
                     store: store,
                     isEnabled: menuBarIconEnabled,
                     styleID: menuBarIconStyleID,
-                    onOpenMiniTimer: openMiniTimerFromMenuBar,
+                    onOpenFloatingTimer: openFloatingTimerFromMenuBar,
                     onOpenSettings: {
                         windowCommandCenter.requestMainWindow(.settings)
                     }
@@ -82,17 +82,17 @@ struct MiniTimerView: View {
         }
     }
 
-    private func openMiniTimerFromMenuBar() {
-        openWindow(id: MiniTimerWindowScene.id)
+    private func openFloatingTimerFromMenuBar() {
+        openWindow(id: FloatingTimerWindowScene.id)
 
         #if os(macOS)
-        FocusTimerWindowLookup.bringToFront(id: MiniTimerWindowScene.id)
+        FocusTimerWindowLookup.bringToFront(id: FloatingTimerWindowScene.id)
         #endif
     }
 }
 
 #if os(macOS)
-private struct MiniTimerDragStrip: NSViewRepresentable {
+private struct FloatingTimerDragStrip: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         DragStripView()
     }
@@ -104,7 +104,7 @@ private struct MiniTimerDragStrip: NSViewRepresentable {
     }
 }
 
-private struct MiniTimerWindowConfigurator: NSViewRepresentable {
+private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
     let opacity: Double
     let clickThroughEnabled: Bool
     let dragStripHeight: CGFloat
@@ -212,7 +212,7 @@ private struct MiniTimerWindowConfigurator: NSViewRepresentable {
         }
 
         private func configure(_ window: NSWindow, appearanceModeID: String) {
-            window.identifier = NSUserInterfaceItemIdentifier(MiniTimerWindowScene.id)
+            window.identifier = NSUserInterfaceItemIdentifier(FloatingTimerWindowScene.id)
             window.level = .floating
             window.collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
             window.isMovableByWindowBackground = true

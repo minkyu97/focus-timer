@@ -22,10 +22,10 @@ struct ContentView: View {
     @AppStorage("focusTimer.completionNotificationEnabled") private var completionNotificationEnabled = true
     @AppStorage("focusTimer.menuBarIconEnabled") private var menuBarIconEnabled = true
     @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
-    @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
-    @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
+    @AppStorage("focusTimer.floatingTimerOpacity") private var floatingTimerOpacity = 0.92
+    @AppStorage("focusTimer.floatingTimerClickThrough") private var floatingTimerClickThrough = false
 
-    @State private var overlayScreen: OverlayScreen?
+    @State private var activeTimerOverlay: TimerOverlay?
     @State private var timeText = FocusTimerFormatting.clock(25 * 60)
     @State private var isEditingTimeText = false
     @State private var editingStartedText: String?
@@ -58,10 +58,10 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            landingScreen
+            timerView
 
-            if let overlayScreen {
-                overlay(for: overlayScreen)
+            if let activeTimerOverlay {
+                overlay(for: activeTimerOverlay)
                     .zIndex(1)
             }
         }
@@ -80,7 +80,7 @@ struct ContentView: View {
                     store: store,
                     isEnabled: menuBarIconEnabled,
                     styleID: menuBarIconStyleID,
-                    onOpenMiniTimer: openMiniTimerFromMenuBar,
+                    onOpenFloatingTimer: openFloatingTimerFromMenuBar,
                     onOpenSettings: {
                         windowCommandCenter.requestMainWindow(.settings)
                     }
@@ -120,10 +120,10 @@ struct ContentView: View {
         .onChange(of: windowCommandCenter.mainWindowRequest?.id) { _ in
             handleMainWindowRequest()
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.88), value: overlayScreen)
+        .animation(.spring(response: 0.32, dampingFraction: 0.88), value: activeTimerOverlay)
     }
 
-    private var landingScreen: some View {
+    private var timerView: some View {
         ZStack {
             Color.clear
                 .contentShape(Rectangle())
@@ -138,10 +138,10 @@ struct ContentView: View {
                     HStack {
                         IconCircleButton(
                             systemName: "line.3.horizontal",
-                            accessibilityLabel: "Timers",
+                            accessibilityLabel: "Saved timers",
                             action: {
                                 finishTimeEditing()
-                                overlayScreen = .timers
+                                activeTimerOverlay = .savedTimers
                             }
                         )
 
@@ -152,7 +152,7 @@ struct ContentView: View {
                             accessibilityLabel: "Settings",
                             action: {
                                 finishTimeEditing()
-                                overlayScreen = .settings
+                                activeTimerOverlay = .settings
                             }
                         )
                     }
@@ -264,10 +264,10 @@ struct ContentView: View {
 
                     IconCircleButton(
                         systemName: "macwindow",
-                        accessibilityLabel: "Open mini timer",
+                        accessibilityLabel: "Open floating timer",
                         action: {
                             finishTimeEditing()
-                            openWindow(id: MiniTimerWindowScene.id)
+                            openWindow(id: FloatingTimerWindowScene.id)
                         }
                     )
 
@@ -292,20 +292,20 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func overlay(for screen: OverlayScreen) -> some View {
+    private func overlay(for screen: TimerOverlay) -> some View {
         switch screen {
-        case .timers:
-            TimerListOverlayView(
+        case .savedTimers:
+            SavedTimersOverlayView(
                 store: store,
                 accentColor: accentColor,
                 onSelect: { timer in
                     stopRinging()
                     clock.setDuration(timer.durationSeconds)
                     store.recordUse(durationSeconds: timer.durationSeconds)
-                    overlayScreen = nil
+                    activeTimerOverlay = nil
                 },
                 onClose: {
-                    overlayScreen = nil
+                    activeTimerOverlay = nil
                 }
             )
             .transition(.move(edge: .leading).combined(with: .opacity))
@@ -321,11 +321,11 @@ struct ContentView: View {
                 completionNotificationEnabled: $completionNotificationEnabled,
                 menuBarIconEnabled: $menuBarIconEnabled,
                 menuBarIconStyleID: $menuBarIconStyleID,
-                miniWindowOpacity: $miniWindowOpacity,
-                miniWindowClickThrough: $miniWindowClickThrough,
+                floatingTimerOpacity: $floatingTimerOpacity,
+                floatingTimerClickThrough: $floatingTimerClickThrough,
                 store: store,
                 onClose: {
-                    overlayScreen = nil
+                    activeTimerOverlay = nil
                 }
             )
             .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -345,9 +345,9 @@ struct ContentView: View {
         #endif
     }
 
-    private func openMiniTimerFromMenuBar() {
+    private func openFloatingTimerFromMenuBar() {
         finishTimeEditing()
-        openWindow(id: MiniTimerWindowScene.id)
+        openWindow(id: FloatingTimerWindowScene.id)
 
         #if os(macOS)
         NSApp.activate(ignoringOtherApps: true)
@@ -417,11 +417,11 @@ struct ContentView: View {
         handledMainWindowRequestID = request.id
 
         switch request.presentation {
-        case .landing:
+        case .timer:
             break
         case .settings:
             finishTimeEditing()
-            overlayScreen = .settings
+            activeTimerOverlay = .settings
         }
 
         #if os(macOS)
@@ -432,8 +432,8 @@ struct ContentView: View {
     }
 }
 
-private enum OverlayScreen: Equatable {
-    case timers
+private enum TimerOverlay: Equatable {
+    case savedTimers
     case settings
 }
 

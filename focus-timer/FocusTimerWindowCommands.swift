@@ -6,7 +6,7 @@ import AppKit
 @preconcurrency import UserNotifications
 
 enum FocusTimerMainWindowPresentation: Equatable {
-    case landing
+    case timer
     case settings
 }
 
@@ -23,7 +23,7 @@ final class FocusTimerWindowCommandCenter: ObservableObject {
 
     private init() {}
 
-    func requestMainWindow(_ presentation: FocusTimerMainWindowPresentation = .landing) {
+    func requestMainWindow(_ presentation: FocusTimerMainWindowPresentation = .timer) {
         mainWindowRequest = FocusTimerMainWindowRequest(presentation: presentation)
     }
 

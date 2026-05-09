@@ -15,8 +15,8 @@ struct SettingsOverlayView: View {
     @Binding var completionNotificationEnabled: Bool
     @Binding var menuBarIconEnabled: Bool
     @Binding var menuBarIconStyleID: String
-    @Binding var miniWindowOpacity: Double
-    @Binding var miniWindowClickThrough: Bool
+    @Binding var floatingTimerOpacity: Double
+    @Binding var floatingTimerClickThrough: Bool
 
     @ObservedObject var store: TimerStore
 
@@ -177,25 +177,25 @@ struct SettingsOverlayView: View {
                     settingsGroup {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Label("Mini Timer Opacity", systemImage: "circle.lefthalf.filled")
+                                Label("Floating Timer Opacity", systemImage: "circle.lefthalf.filled")
                                     .font(.system(size: 14, weight: .medium))
 
                                 Spacer()
 
-                                Text("\(Int(miniWindowOpacity * 100))%")
+                                Text("\(Int(floatingTimerOpacity * 100))%")
                                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
                             }
 
-                            Slider(value: $miniWindowOpacity, in: 0.35...1, step: 0.05)
+                            Slider(value: $floatingTimerOpacity, in: 0.35...1, step: 0.05)
                                 .tint(selectedAccentColor)
                         }
                     }
 
                     settingsGroup {
-                        Toggle(isOn: $miniWindowClickThrough) {
-                            Label("Mini Timer Click-Through", systemImage: "cursorarrow")
+                        Toggle(isOn: $floatingTimerClickThrough) {
+                            Label("Floating Timer Click-Through", systemImage: "cursorarrow")
                                 .font(.system(size: 14, weight: .medium))
                         }
                         .toggleStyle(.switch)

@@ -23,8 +23,12 @@ struct focus_timerApp: App {
     @AppStorage("focusTimer.appearanceModeID") private var appearanceModeID = FocusTimerAppearanceMode.system.rawValue
     @AppStorage("focusTimer.menuBarIconEnabled") private var menuBarIconEnabled = true
     @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
-    @AppStorage("focusTimer.miniWindowOpacity") private var miniWindowOpacity = 0.92
-    @AppStorage("focusTimer.miniWindowClickThrough") private var miniWindowClickThrough = false
+    @AppStorage("focusTimer.floatingTimerOpacity") private var floatingTimerOpacity = 0.92
+    @AppStorage("focusTimer.floatingTimerClickThrough") private var floatingTimerClickThrough = false
+
+    init() {
+        FocusTimerPreferenceMigration.migrateLegacyKeys()
+    }
 
     private var accentColor: Color {
         FocusTimerAccentColor.color(selectionID: accentColorID, customHex: customAccentColorHex)
@@ -51,21 +55,21 @@ struct focus_timerApp: App {
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
 
-        Window("Mini Timer", id: MiniTimerWindowScene.id) {
-            MiniTimerView(
+        Window("Floating Timer", id: FloatingTimerWindowScene.id) {
+            FloatingTimerView(
                 clock: clock,
                 store: store,
                 windowCommandCenter: windowCommandCenter,
                 accentColor: accentColor,
-                windowOpacity: miniWindowOpacity,
-                clickThroughEnabled: miniWindowClickThrough,
+                windowOpacity: floatingTimerOpacity,
+                clickThroughEnabled: floatingTimerClickThrough,
                 appearanceModeID: appearanceModeID,
                 menuBarIconEnabled: menuBarIconEnabled,
                 menuBarIconStyleID: menuBarIconStyleID
             )
             .preferredColorScheme(preferredColorScheme)
         }
-        .defaultSize(width: MiniTimerWindowScene.width, height: MiniTimerWindowScene.height)
+        .defaultSize(width: FloatingTimerWindowScene.width, height: FloatingTimerWindowScene.height)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
     }
