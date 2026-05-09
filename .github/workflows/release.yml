@@ -1,0 +1,118 @@
+name: Release Deploy
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create or update"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-app:
+    name: Build macOS app
+    runs-on: macos-26
+
+    env:
+      PROJECT: focus-timer.xcodeproj
+      SCHEME: focus-timer
+      CONFIGURATION: Release
+      APP_NAME: Focus Timer
+      ASSET_NAME: Focus-Timer-macOS.app.zip
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Resolve release tag
+        id: release_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            tag="${{ github.event.release.tag_name }}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${{ inputs.tag }}"
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "A release tag is required." >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build Release app
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
+            -sdk macosx \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package .app bundle
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="$RUNNER_TEMP/DerivedData/Build/Products/$CONFIGURATION/$APP_NAME.app"
+          output_dir="$RUNNER_TEMP/release"
+          asset_path="$output_dir/$ASSET_NAME"
+
+          if [[ ! -d "$app_path" ]]; then
+            echo "Expected app bundle was not found: $app_path" >&2
+            find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 3 -name "*.app" -print >&2 || true
+            exit 1
+          fi
+
+          mkdir -p "$output_dir"
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$asset_path"
+
+          echo "asset_path=$asset_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: ${{ steps.package.outputs.asset_path }}
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.release_tag.outputs.tag }}
+          ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "$ASSET_PATH" --clobber
+          else
+            gh release create "$TAG_NAME" "$ASSET_PATH" \
+              --title "$TAG_NAME" \
+              --notes "Release $TAG_NAME" \
+              --target "$GITHUB_SHA"
+          fi
