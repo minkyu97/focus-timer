@@ -12,6 +12,7 @@ struct focus_timerApp: App {
     #if os(macOS)
     @NSApplicationDelegateAdaptor(FocusTimerAppDelegate.self) private var appDelegate
     @StateObject private var windowCommandCenter = FocusTimerWindowCommandCenter.shared
+    @StateObject private var updater: FocusTimerUpdater
     #endif
 
     @StateObject private var clock: FocusTimerClock
@@ -32,6 +33,10 @@ struct focus_timerApp: App {
         let timerStore = TimerStore()
         _store = StateObject(wrappedValue: timerStore)
         _clock = StateObject(wrappedValue: FocusTimerClock(initialSeconds: timerStore.lastUsedDurationSeconds))
+
+        #if os(macOS)
+        _updater = StateObject(wrappedValue: FocusTimerUpdater())
+        #endif
     }
 
     private var accentColor: Color {
@@ -51,7 +56,8 @@ struct focus_timerApp: App {
             ContentView(
                 clock: clock,
                 store: store,
-                windowCommandCenter: windowCommandCenter
+                windowCommandCenter: windowCommandCenter,
+                updater: updater
             )
                 .preferredColorScheme(preferredColorScheme)
         }
@@ -64,6 +70,7 @@ struct focus_timerApp: App {
                 clock: clock,
                 store: store,
                 windowCommandCenter: windowCommandCenter,
+                updater: updater,
                 accentColor: accentColor,
                 windowOpacity: floatingTimerOpacity,
                 clickThroughEnabled: floatingTimerClickThrough,
@@ -76,5 +83,10 @@ struct focus_timerApp: App {
         .defaultSize(width: FloatingTimerWindowScene.width, height: FloatingTimerWindowScene.height)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesCommandView(updater: updater)
+            }
+        }
     }
 }

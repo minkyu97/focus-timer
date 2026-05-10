@@ -40,7 +40,7 @@ window behavior, menu bar integration, sounds, and notifications.
 - `focus-timer/SettingsOverlayView.swift`
   - Settings screen.
   - Contains disk color, custom color, appearance mode, completion sound,
-    notifications, menu bar, and floating timer settings.
+    notifications, menu bar, update, and floating timer settings.
 
 - `focus-timer/FloatingTimerView.swift`
   - Floating timer window UI and AppKit window configuration.
@@ -52,7 +52,15 @@ window behavior, menu bar integration, sounds, and notifications.
   - AppKit `NSStatusItem` controller.
   - Builds the menu bar menu and supports normal icon or remaining-time icon
     modes.
-  - Opens the main window, floating timer, settings, and instant-start timers.
+  - Opens the main window, floating timer, settings, instant-start timers, and
+    Sparkle update checks.
+
+- `focus-timer/FocusTimerUpdater.swift`
+  - Sparkle integration wrapper.
+  - Owns `SPUStandardUpdaterController`.
+  - Exposes manual update checks, automatic update check state, and automatic
+    download state to SwiftUI.
+  - Starts Sparkle only when `SUFeedURL` and `SUPublicEDKey` are configured.
 
 - `focus-timer/FocusTimerWindowCommands.swift`
   - Window and app coordination helpers.
@@ -133,6 +141,16 @@ Change menu bar behavior in:
 - `focus-timer/FocusTimerMenuBarController.swift`
 - `focus-timer/focus_timerApp.swift`
 
+Change update behavior in:
+
+- `focus-timer/FocusTimerUpdater.swift`
+- `focus-timer/SettingsOverlayView.swift` for update settings UI
+- `focus-timer/FocusTimerMenuBarController.swift` for menu bar update actions
+- `.github/workflows/release.yml` for release appcast generation
+- `Config/Info.plist` for Sparkle Info.plist keys and feed URL
+- `focus-timer.xcodeproj/project.pbxproj` for Sparkle package/build settings
+- `focus-timer/focus-timer.entitlements` for sandbox requirements
+
 Change instant-start timer selection in the menu bar in:
 
 - `focus-timer/FocusTimerMenuBarController.swift`
@@ -163,6 +181,10 @@ Important keys include:
 - `focusTimer.menuBarIconStyleID`
 - `focusTimer.floatingTimerOpacity`
 - `focusTimer.floatingTimerClickThrough`
+
+Sparkle stores its own updater preferences in the host app's user defaults.
+Do not mirror Sparkle's automatic update settings into separate app-specific
+keys; use `SPUUpdater` properties through `FocusTimerUpdater`.
 
 Custom sound files are copied into the user's Application Support directory:
 
@@ -205,10 +227,12 @@ After UI or behavior changes, manually verify:
 - Pinned and recent timer sorting/removal
 - Floating timer opening, closing, opacity, and click-through behavior
 - Menu bar icon enablement and icon style
+- Sparkle check-for-updates action and automatic update toggles
 - System, dark, and white appearance modes
 
 ## Platform Notes
 
 The app targets macOS 13.0 or later. SwiftUI handles most UI, while AppKit is
 used where macOS-specific control is needed, including window customization,
-status items, native sounds, and notification delegation.
+status items, native sounds, notification delegation, and Sparkle update
+installation helpers.

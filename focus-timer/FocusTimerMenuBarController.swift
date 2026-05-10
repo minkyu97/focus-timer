@@ -5,6 +5,7 @@ import AppKit
 struct FocusTimerMenuBarBridge: View {
     let clock: FocusTimerClock
     let store: TimerStore
+    @ObservedObject var updater: FocusTimerUpdater
     let isEnabled: Bool
     let styleID: String
     let onOpenFloatingTimer: () -> Void
@@ -19,12 +20,19 @@ struct FocusTimerMenuBarBridge: View {
             .onChange(of: styleID) { _ in
                 updateMenuBar()
             }
+            .onChange(of: updater.canCheckForUpdates) { _ in
+                updateMenuBar()
+            }
+            .onChange(of: updater.isConfigured) { _ in
+                updateMenuBar()
+            }
     }
 
     private func updateMenuBar() {
         FocusTimerMenuBarController.shared.configure(
             clock: clock,
             store: store,
+            updater: updater,
             isEnabled: isEnabled,
             styleID: styleID,
             onOpenFloatingTimer: onOpenFloatingTimer,
@@ -39,6 +47,7 @@ final class FocusTimerMenuBarController: NSObject {
 
     private weak var clock: FocusTimerClock?
     private weak var store: TimerStore?
+    private weak var updater: FocusTimerUpdater?
     private var isEnabled = false
     private var styleID = FocusTimerMenuBarIconStyle.normal.rawValue
     private var statusItem: NSStatusItem?
@@ -56,6 +65,7 @@ final class FocusTimerMenuBarController: NSObject {
     func configure(
         clock: FocusTimerClock,
         store: TimerStore,
+        updater: FocusTimerUpdater,
         isEnabled: Bool,
         styleID: String,
         onOpenFloatingTimer: @escaping () -> Void,
@@ -65,6 +75,7 @@ final class FocusTimerMenuBarController: NSObject {
         let storeChanged = self.store !== store
         self.clock = clock
         self.store = store
+        self.updater = updater
         self.isEnabled = isEnabled
         self.styleID = styleID
         self.onOpenFloatingTimer = onOpenFloatingTimer
@@ -208,6 +219,16 @@ final class FocusTimerMenuBarController: NSObject {
         settingsItem.isEnabled = onOpenSettings != nil
         menu.addItem(settingsItem)
 
+        let checkForUpdatesItem = NSMenuItem(
+            title: "Check for Updates...",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        checkForUpdatesItem.target = self
+        checkForUpdatesItem.image = symbolImage("arrow.triangle.2.circlepath")
+        checkForUpdatesItem.isEnabled = updater?.canCheckForUpdates == true
+        menu.addItem(checkForUpdatesItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -316,6 +337,11 @@ final class FocusTimerMenuBarController: NSObject {
 
     @objc private func openSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func checkForUpdates() {
+        updater?.checkForUpdates()
+        refresh(force: true)
     }
 
     @objc private func quitApp() {

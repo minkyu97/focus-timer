@@ -18,6 +18,7 @@ struct SettingsOverlayView: View {
     @Binding var floatingTimerOpacity: Double
     @Binding var floatingTimerClickThrough: Bool
 
+    @ObservedObject var updater: FocusTimerUpdater
     @ObservedObject var store: TimerStore
 
     let onClose: () -> Void
@@ -40,6 +41,14 @@ struct SettingsOverlayView: View {
 
     private var canRemoveSelectedSound: Bool {
         completionSoundID == FocusTimerCompletionSound.customID && !customCompletionSoundName.isEmpty
+    }
+
+    private var canEditUpdaterSettings: Bool {
+        updater.isConfigured
+    }
+
+    private var canAutomaticallyDownloadUpdates: Bool {
+        updater.isConfigured && updater.automaticallyChecksForUpdates && updater.allowsAutomaticUpdates
     }
 
     var body: some View {
@@ -156,6 +165,39 @@ struct SettingsOverlayView: View {
 
                     settingsGroup {
                         VStack(alignment: .leading, spacing: 12) {
+                            Label("Updates", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 14, weight: .medium))
+
+                            Toggle(isOn: automaticUpdateChecksBinding) {
+                                Text("Automatically Check for Updates")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .toggleStyle(.switch)
+                            .disabled(!canEditUpdaterSettings)
+                            .opacity(canEditUpdaterSettings ? 1 : 0.45)
+
+                            Toggle(isOn: automaticDownloadUpdatesBinding) {
+                                Text("Download Updates Automatically")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .toggleStyle(.switch)
+                            .disabled(!canAutomaticallyDownloadUpdates)
+                            .opacity(canAutomaticallyDownloadUpdates ? 1 : 0.45)
+
+                            Button {
+                                updater.checkForUpdates()
+                            } label: {
+                                Label("Check for Updates", systemImage: "arrow.clockwise")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(!updater.canCheckForUpdates)
+                            .opacity(updater.canCheckForUpdates ? 1 : 0.45)
+                        }
+                    }
+
+                    settingsGroup {
+                        VStack(alignment: .leading, spacing: 12) {
                             Toggle(isOn: $menuBarIconEnabled) {
                                 Label("Menu Bar Icon", systemImage: "menubar.rectangle")
                                     .font(.system(size: 14, weight: .medium))
@@ -227,6 +269,20 @@ struct SettingsOverlayView: View {
         .onAppear {
             completionSoundID = FocusTimerCompletionSound.normalizedSoundID(completionSoundID)
         }
+    }
+
+    private var automaticUpdateChecksBinding: Binding<Bool> {
+        Binding(
+            get: { updater.automaticallyChecksForUpdates },
+            set: { updater.setAutomaticallyChecksForUpdates($0) }
+        )
+    }
+
+    private var automaticDownloadUpdatesBinding: Binding<Bool> {
+        Binding(
+            get: { updater.automaticallyDownloadsUpdates },
+            set: { updater.setAutomaticallyDownloadsUpdates($0) }
+        )
     }
 
     private var customColorButton: some View {

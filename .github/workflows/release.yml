@@ -24,7 +24,8 @@ jobs:
       SCHEME: focus-timer
       CONFIGURATION: Release
       APP_NAME: Focus Timer
-      ASSET_NAME: Focus-Timer-macOS.app.zip
+      APPCAST_NAME: appcast.xml
+      SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
 
     steps:
       - name: Resolve release tag
@@ -59,6 +60,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [[ -z "${SPARKLE_PUBLIC_ED_KEY:-}" ]]; then
+            echo "SPARKLE_PUBLIC_ED_KEY repository variable is required for Sparkle releases." >&2
+            exit 1
+          fi
+
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
@@ -69,6 +75,7 @@ jobs:
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGNING_REQUIRED=YES \
             CODE_SIGN_IDENTITY="-" \
+            SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" \
             build
 
       - name: Locate built app
@@ -86,6 +93,18 @@ jobs:
           fi
 
           echo "app_path=$app_path" >> "$GITHUB_OUTPUT"
+
+          short_version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app_path/Contents/Info.plist")"
+          bundle_version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$app_path/Contents/Info.plist")"
+
+          if [[ -z "$short_version" || -z "$bundle_version" ]]; then
+            echo "Version metadata was not found in Info.plist." >&2
+            exit 1
+          fi
+
+          echo "short_version=$short_version" >> "$GITHUB_OUTPUT"
+          echo "bundle_version=$bundle_version" >> "$GITHUB_OUTPUT"
+          echo "asset_name=Focus-Timer-$short_version.app.zip" >> "$GITHUB_OUTPUT"
 
       - name: Verify ad-hoc signature
         shell: bash
@@ -105,7 +124,7 @@ jobs:
 
           app_path="${{ steps.app.outputs.app_path }}"
           output_dir="$RUNNER_TEMP/release"
-          asset_path="$output_dir/$ASSET_NAME"
+          asset_path="$output_dir/${{ steps.app.outputs.asset_name }}"
 
           mkdir -p "$output_dir"
 
@@ -113,11 +132,77 @@ jobs:
 
           echo "asset_path=$asset_path" >> "$GITHUB_OUTPUT"
 
+      - name: Generate Sparkle appcast
+        id: sparkle_appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          TAG_NAME: ${{ steps.release_tag.outputs.tag }}
+          ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+          ASSET_NAME: ${{ steps.app.outputs.asset_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
+            echo "SPARKLE_PRIVATE_KEY repository secret is required to sign Sparkle updates." >&2
+            exit 1
+          fi
+
+          sign_update="$(find "$RUNNER_TEMP/DerivedData/SourcePackages/artifacts" -path "*/Sparkle/bin/sign_update" -type f -print -quit)"
+
+          if [[ -z "$sign_update" ]]; then
+            echo "Sparkle sign_update tool was not found in SwiftPM artifacts." >&2
+            find "$RUNNER_TEMP/DerivedData/SourcePackages" -maxdepth 6 -type f -name "sign_update" -print >&2 || true
+            exit 1
+          fi
+
+          key_file="$RUNNER_TEMP/sparkle_private_key"
+          printf "%s" "$SPARKLE_PRIVATE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+
+          signature_attrs="$("$sign_update" -f "$key_file" "$ASSET_PATH")"
+          rm -f "$key_file"
+
+          app_path="${{ steps.app.outputs.app_path }}"
+          short_version="${{ steps.app.outputs.short_version }}"
+          bundle_version="${{ steps.app.outputs.bundle_version }}"
+          minimum_system_version="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$app_path/Contents/Info.plist" 2>/dev/null || echo "13.0")"
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
+          archive_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${ASSET_NAME}"
+          pub_date="$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")"
+          output_dir="$RUNNER_TEMP/release"
+          appcast_path="$output_dir/$APPCAST_NAME"
+
+          cat > "$appcast_path" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Focus Timer Updates</title>
+              <link>https://github.com/${GITHUB_REPOSITORY}/releases</link>
+              <description>Focus Timer update feed</description>
+              <language>en</language>
+              <item>
+                <title>Focus Timer ${short_version}</title>
+                <pubDate>${pub_date}</pubDate>
+                <sparkle:version>${bundle_version}</sparkle:version>
+                <sparkle:shortVersionString>${short_version}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>${minimum_system_version}</sparkle:minimumSystemVersion>
+                <sparkle:releaseNotesLink>${release_url}</sparkle:releaseNotesLink>
+                <enclosure url="${archive_url}" ${signature_attrs} type="application/zip" />
+              </item>
+            </channel>
+          </rss>
+          EOF
+
+          echo "appcast_path=$appcast_path" >> "$GITHUB_OUTPUT"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ASSET_NAME }}
-          path: ${{ steps.package.outputs.asset_path }}
+          name: release-assets
+          path: |
+            ${{ steps.package.outputs.asset_path }}
+            ${{ steps.sparkle_appcast.outputs.appcast_path }}
           if-no-files-found: error
 
       - name: Create or update GitHub release
@@ -125,14 +210,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ steps.release_tag.outputs.tag }}
           ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+          APPCAST_PATH: ${{ steps.sparkle_appcast.outputs.appcast_path }}
         shell: bash
         run: |
           set -euo pipefail
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "$ASSET_PATH" --clobber
+            gh release upload "$TAG_NAME" "$ASSET_PATH" "$APPCAST_PATH" --clobber
           else
-            gh release create "$TAG_NAME" "$ASSET_PATH" \
+            gh release create "$TAG_NAME" "$ASSET_PATH" "$APPCAST_PATH" \
               --title "$TAG_NAME" \
               --notes "Release $TAG_NAME" \
               --verify-tag

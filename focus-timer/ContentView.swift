@@ -9,6 +9,7 @@ struct ContentView: View {
     @ObservedObject var clock: FocusTimerClock
     @ObservedObject var store: TimerStore
     @ObservedObject var windowCommandCenter: FocusTimerWindowCommandCenter
+    @ObservedObject var updater: FocusTimerUpdater
     @StateObject private var completionSoundPlayer = FocusTimerCompletionSoundPlayer.shared
 
     @Environment(\.openWindow) private var openWindow
@@ -78,6 +79,7 @@ struct ContentView: View {
                 FocusTimerMenuBarBridge(
                     clock: clock,
                     store: store,
+                    updater: updater,
                     isEnabled: menuBarIconEnabled,
                     styleID: menuBarIconStyleID,
                     onOpenFloatingTimer: openFloatingTimerFromMenuBar,
@@ -323,6 +325,7 @@ struct ContentView: View {
                 menuBarIconStyleID: $menuBarIconStyleID,
                 floatingTimerOpacity: $floatingTimerOpacity,
                 floatingTimerClickThrough: $floatingTimerClickThrough,
+                updater: updater,
                 store: store,
                 onClose: {
                     activeTimerOverlay = nil

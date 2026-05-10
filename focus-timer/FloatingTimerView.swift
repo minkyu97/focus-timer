@@ -15,6 +15,7 @@ struct FloatingTimerView: View {
     @ObservedObject var clock: FocusTimerClock
     @ObservedObject var store: TimerStore
     @ObservedObject var windowCommandCenter: FocusTimerWindowCommandCenter
+    @ObservedObject var updater: FocusTimerUpdater
 
     @Environment(\.openWindow) private var openWindow
 
@@ -69,6 +70,7 @@ struct FloatingTimerView: View {
                 FocusTimerMenuBarBridge(
                     clock: clock,
                     store: store,
+                    updater: updater,
                     isEnabled: menuBarIconEnabled,
                     styleID: menuBarIconStyleID,
                     onOpenFloatingTimer: openFloatingTimerFromMenuBar,
