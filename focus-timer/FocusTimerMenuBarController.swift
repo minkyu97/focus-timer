@@ -164,6 +164,17 @@ final class FocusTimerMenuBarController: NSObject {
     }
 
     private func updateMenu(clock: FocusTimerClock) {
+        statusItem?.menu = makeMenu(clock: clock)
+    }
+
+    func popUpContextMenu(at location: NSPoint, in view: NSView) {
+        guard let clock else { return }
+
+        let menu = makeMenu(clock: clock)
+        menu.popUp(positioning: nil, at: location, in: view)
+    }
+
+    private func makeMenu(clock: FocusTimerClock) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
@@ -245,7 +256,7 @@ final class FocusTimerMenuBarController: NSObject {
         quitItem.isEnabled = true
         menu.addItem(quitItem)
 
-        statusItem?.menu = menu
+        return menu
     }
 
     private func addInstantStartSection(to menu: NSMenu) {

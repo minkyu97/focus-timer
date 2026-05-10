@@ -29,7 +29,9 @@ struct FloatingTimerView: View {
     var body: some View {
         VStack(spacing: 6) {
             #if os(macOS)
-            FloatingTimerDragStrip()
+            FloatingTimerDragStrip { view, location in
+                FocusTimerMenuBarController.shared.popUpContextMenu(at: location, in: view)
+            }
                 .frame(height: 24)
             #else
             Color.clear
@@ -95,14 +97,45 @@ struct FloatingTimerView: View {
 
 #if os(macOS)
 private struct FloatingTimerDragStrip: NSViewRepresentable {
+    let onMenuRequest: (NSView, NSPoint) -> Void
+
     func makeNSView(context: Context) -> NSView {
-        DragStripView()
+        DragStripView(onMenuRequest: onMenuRequest)
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let dragStripView = nsView as? DragStripView else { return }
+        dragStripView.onMenuRequest = onMenuRequest
+    }
 
     private final class DragStripView: NSView {
-        override var mouseDownCanMoveWindow: Bool { true }
+        var onMenuRequest: (NSView, NSPoint) -> Void
+
+        init(onMenuRequest: @escaping (NSView, NSPoint) -> Void) {
+            self.onMenuRequest = onMenuRequest
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override var mouseDownCanMoveWindow: Bool { false }
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+            true
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            if let window {
+                window.performDrag(with: event)
+            }
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            onMenuRequest(self, convert(event.locationInWindow, from: nil))
+        }
     }
 }
 
