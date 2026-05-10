@@ -92,15 +92,6 @@ struct ContentView: View {
             .allowsHitTesting(false)
             #endif
         }
-        .onChange(of: clock.completionCount) { completionCount in
-            if completionCount > 0, soundEnabled {
-                playCompletionSound()
-
-                if completionNotificationEnabled {
-                    FocusTimerCompletionNotification.post()
-                }
-            }
-        }
         .onChange(of: clock.remainingSeconds) { remainingSeconds in
             guard !isEditingTimeText else { return }
             timeText = FocusTimerFormatting.clock(remainingSeconds)
@@ -333,12 +324,6 @@ struct ContentView: View {
             )
             .transition(.move(edge: .trailing).combined(with: .opacity))
         }
-    }
-
-    private func playCompletionSound() {
-        #if os(macOS)
-        completionSoundPlayer.play(soundID: completionSoundID)
-        #endif
     }
 
     private func stopRinging() {

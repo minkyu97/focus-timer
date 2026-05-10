@@ -528,6 +528,84 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
     }
 }
 
+@MainActor
+final class FocusTimerCompletionController {
+    static let shared = FocusTimerCompletionController()
+
+    private let userDefaults = UserDefaults.standard
+    private var clock: FocusTimerClock?
+    private var clockCancellable: AnyCancellable?
+    private var userDefaultsCancellable: AnyCancellable?
+    private var lastCompletionCount = 0
+
+    private init() {
+        userDefaultsCancellable = NotificationCenter.default
+            .publisher(for: UserDefaults.didChangeNotification, object: userDefaults)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.handleSettingsChange()
+                }
+            }
+    }
+
+    func configure(clock: FocusTimerClock) {
+        guard self.clock !== clock else { return }
+
+        self.clock = clock
+        lastCompletionCount = clock.completionCount
+        clockCancellable = clock.$completionCount.sink { [weak self] completionCount in
+            Task { @MainActor in
+                self?.handleCompletionCount(completionCount)
+            }
+        }
+    }
+
+    private func handleCompletionCount(_ completionCount: Int) {
+        guard completionCount > lastCompletionCount else {
+            lastCompletionCount = completionCount
+            return
+        }
+
+        lastCompletionCount = completionCount
+
+        guard soundEnabled else { return }
+
+        FocusTimerCompletionSoundPlayer.shared.play(soundID: completionSoundID)
+
+        if completionNotificationEnabled {
+            FocusTimerCompletionNotification.post()
+        }
+    }
+
+    private func handleSettingsChange() {
+        if !soundEnabled {
+            FocusTimerCompletionSoundPlayer.shared.stop()
+            FocusTimerCompletionNotification.clear()
+        }
+
+        if !completionNotificationEnabled {
+            FocusTimerCompletionNotification.clear()
+        }
+    }
+
+    private var soundEnabled: Bool {
+        boolSetting(forKey: "focusTimer.soundEnabled", defaultValue: true)
+    }
+
+    private var completionSoundID: String {
+        userDefaults.string(forKey: "focusTimer.completionSoundID") ?? FocusTimerCompletionSound.systemAlertID
+    }
+
+    private var completionNotificationEnabled: Bool {
+        boolSetting(forKey: "focusTimer.completionNotificationEnabled", defaultValue: true)
+    }
+
+    private func boolSetting(forKey key: String, defaultValue: Bool) -> Bool {
+        guard userDefaults.object(forKey: key) != nil else { return defaultValue }
+        return userDefaults.bool(forKey: key)
+    }
+}
+
 enum FocusTimerCompletionNotification {
     nonisolated static let notificationID = "focusTimer.timerComplete.notification"
     nonisolated static let categoryID = "focusTimer.timerComplete.category"

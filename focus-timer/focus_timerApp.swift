@@ -31,10 +31,12 @@ struct focus_timerApp: App {
         FocusTimerPreferenceMigration.migrateLegacyKeys()
 
         let timerStore = TimerStore()
+        let timerClock = FocusTimerClock(initialSeconds: timerStore.lastUsedDurationSeconds)
         _store = StateObject(wrappedValue: timerStore)
-        _clock = StateObject(wrappedValue: FocusTimerClock(initialSeconds: timerStore.lastUsedDurationSeconds))
+        _clock = StateObject(wrappedValue: timerClock)
 
         #if os(macOS)
+        FocusTimerCompletionController.shared.configure(clock: timerClock)
         _updater = StateObject(wrappedValue: FocusTimerUpdater())
         #endif
     }
