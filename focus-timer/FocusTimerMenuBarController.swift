@@ -43,9 +43,11 @@ final class FocusTimerMenuBarController: NSObject {
     private var styleID = FocusTimerMenuBarIconStyle.normal.rawValue
     private var statusItem: NSStatusItem?
     private var clockCancellable: AnyCancellable?
+    private var storeCancellable: AnyCancellable?
     private var renderedState: RenderedState?
     private var onOpenFloatingTimer: (() -> Void)?
     private var onOpenSettings: (() -> Void)?
+    private let maxInstantStartRecentCount = 5
 
     private override init() {
         super.init()
@@ -60,6 +62,7 @@ final class FocusTimerMenuBarController: NSObject {
         onOpenSettings: @escaping () -> Void
     ) {
         let clockChanged = self.clock !== clock
+        let storeChanged = self.store !== store
         self.clock = clock
         self.store = store
         self.isEnabled = isEnabled
@@ -71,6 +74,14 @@ final class FocusTimerMenuBarController: NSObject {
             clockCancellable = clock.objectWillChange.sink { [weak self] _ in
                 Task { @MainActor in
                     self?.refresh()
+                }
+            }
+        }
+
+        if storeChanged {
+            storeCancellable = store.objectWillChange.sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.refresh(force: true)
                 }
             }
         }
@@ -173,6 +184,9 @@ final class FocusTimerMenuBarController: NSObject {
         menu.addItem(resetItem)
 
         menu.addItem(.separator())
+        addInstantStartSection(to: menu)
+
+        menu.addItem(.separator())
 
         let floatingTimerItem = NSMenuItem(
             title: "Open Floating Timer",
@@ -208,6 +222,54 @@ final class FocusTimerMenuBarController: NSObject {
         statusItem?.menu = menu
     }
 
+    private func addInstantStartSection(to menu: NSMenu) {
+        let headerItem = NSMenuItem(title: "Instant Start", action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+
+        guard let store else {
+            addEmptyInstantStartItem(to: menu)
+            return
+        }
+
+        let timers = store.pinnedTimers + Array(store.recentTimers.prefix(maxInstantStartRecentCount))
+
+        guard !timers.isEmpty else {
+            addEmptyInstantStartItem(to: menu)
+            return
+        }
+
+        for timer in timers {
+            let item = NSMenuItem(
+                title: FocusTimerFormatting.compactDuration(timer.durationSeconds),
+                action: #selector(instantStartTimer(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = timer.durationSeconds
+            item.image = symbolImage(timer.isPinned ? "heart.fill" : "clock.arrow.circlepath")
+            item.toolTip = timer.isPinned ? "Pinned timer" : "Recent timer"
+            item.isEnabled = true
+            menu.addItem(item)
+        }
+
+        let clearRecentItem = NSMenuItem(
+            title: "Clear Recent Timers",
+            action: #selector(clearRecentTimers),
+            keyEquivalent: ""
+        )
+        clearRecentItem.target = self
+        clearRecentItem.image = symbolImage("trash")
+        clearRecentItem.isEnabled = store.hasRecentTimers
+        menu.addItem(clearRecentItem)
+    }
+
+    private func addEmptyInstantStartItem(to menu: NSMenu) {
+        let emptyItem = NSMenuItem(title: "No saved timers", action: nil, keyEquivalent: "")
+        emptyItem.isEnabled = false
+        menu.addItem(emptyItem)
+    }
+
     private func symbolImage(_ name: String, accessibilityDescription: String? = nil) -> NSImage? {
         let image = NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription)
         image?.isTemplate = true
@@ -229,6 +291,22 @@ final class FocusTimerMenuBarController: NSObject {
 
     @objc private func resetTimer() {
         clock?.reset()
+        refresh(force: true)
+    }
+
+    @objc private func instantStartTimer(_ sender: NSMenuItem) {
+        guard let durationSeconds = sender.representedObject as? Int, let clock else { return }
+
+        FocusTimerCompletionSoundPlayer.shared.stop()
+        FocusTimerCompletionNotification.clear()
+        clock.setDuration(durationSeconds)
+        store?.recordUse(durationSeconds: durationSeconds)
+        clock.start()
+        refresh(force: true)
+    }
+
+    @objc private func clearRecentTimers() {
+        store?.clearRecentTimers()
         refresh(force: true)
     }
 

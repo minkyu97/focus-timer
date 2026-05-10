@@ -13,15 +13,19 @@ final class TimerStore: ObservableObject {
         load()
     }
 
-    var sortedTimers: [StoredTimer] {
-        let pinnedTimers = timers
+    var pinnedTimers: [StoredTimer] {
+        timers
             .filter(\.isPinned)
             .sorted { $0.durationSeconds > $1.durationSeconds }
+    }
 
-        let recentTimers = timers
+    var recentTimers: [StoredTimer] {
+        timers
             .filter { !$0.isPinned }
             .sorted { $0.lastUsed > $1.lastUsed }
+    }
 
+    var sortedTimers: [StoredTimer] {
         return pinnedTimers + recentTimers
     }
 

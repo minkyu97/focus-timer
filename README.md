@@ -21,6 +21,7 @@ The app is a native SwiftUI/AppKit macOS app.
 - Floating read-only timer window
 - Optional click-through floating timer mode
 - Menu bar item with configurable icon style
+- Instant start timers from the menu bar
 - System, dark, and white appearance modes
 - Built-in and custom completion sounds
 - Stop ringing control when a timer completes

@@ -52,7 +52,7 @@ window behavior, menu bar integration, sounds, and notifications.
   - AppKit `NSStatusItem` controller.
   - Builds the menu bar menu and supports normal icon or remaining-time icon
     modes.
-  - Opens the main window, floating timer, and settings.
+  - Opens the main window, floating timer, settings, and instant-start timers.
 
 - `focus-timer/FocusTimerWindowCommands.swift`
   - Window and app coordination helpers.
@@ -132,6 +132,11 @@ Change menu bar behavior in:
 
 - `focus-timer/FocusTimerMenuBarController.swift`
 - `focus-timer/focus_timerApp.swift`
+
+Change instant-start timer selection in the menu bar in:
+
+- `focus-timer/FocusTimerMenuBarController.swift`
+- `focus-timer/TimerStore.swift` for pinned and recent timer ordering
 
 Change app icons or bundled assets in:
 
