@@ -22,9 +22,18 @@ struct FloatingTimerView: View {
     let accentColor: Color
     let windowOpacity: Double
     let clickThroughEnabled: Bool
+    let displayModeID: String
     let appearanceModeID: String
     let menuBarIconEnabled: Bool
     let menuBarIconStyleID: String
+
+    private var displayMode: FocusTimerFloatingTimerDisplayMode {
+        FocusTimerFloatingTimerDisplayMode.resolved(from: displayModeID)
+    }
+
+    private var layout: FloatingTimerLayout {
+        FloatingTimerLayout(mode: displayMode)
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -38,25 +47,29 @@ struct FloatingTimerView: View {
                 .frame(height: 24)
             #endif
 
-            TimerDiskView(
-                remainingSeconds: clock.remainingSeconds,
-                selectedSeconds: clock.selectedSeconds,
-                accentColor: accentColor,
-                isRunning: clock.isRunning,
-                onDurationChange: { _ in }
-            )
-            .frame(width: 150, height: 150)
-            .allowsHitTesting(false)
+            if displayMode.showsDisk {
+                TimerDiskView(
+                    remainingSeconds: clock.remainingSeconds,
+                    selectedSeconds: clock.selectedSeconds,
+                    accentColor: accentColor,
+                    isRunning: clock.isRunning,
+                    onDurationChange: { _ in }
+                )
+                .frame(width: layout.diskSize, height: layout.diskSize)
+                .allowsHitTesting(false)
+            }
 
-            Text(FocusTimerFormatting.clock(clock.remainingSeconds))
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
+            if displayMode.showsTime {
+                Text(FocusTimerFormatting.clock(clock.remainingSeconds))
+                    .font(.system(size: layout.timeFontSize, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.bottom, 6)
-        .frame(width: FloatingTimerWindowScene.width, height: FloatingTimerWindowScene.height)
+        .padding(.bottom, layout.bottomPadding)
+        .frame(width: layout.windowSize.width, height: layout.windowSize.height)
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea(edges: .top))
         .ignoresSafeArea(edges: .top)
         .overlay {
@@ -64,6 +77,7 @@ struct FloatingTimerView: View {
                 FloatingTimerWindowConfigurator(
                     opacity: windowOpacity,
                     clickThroughEnabled: clickThroughEnabled,
+                    contentSize: layout.windowSize,
                     dragStripHeight: FloatingTimerWindowScene.dragStripHitHeight,
                     appearanceModeID: appearanceModeID
                 )
@@ -92,6 +106,53 @@ struct FloatingTimerView: View {
         #if os(macOS)
         FocusTimerWindowLookup.bringToFront(id: FloatingTimerWindowScene.id)
         #endif
+    }
+}
+
+private struct FloatingTimerLayout {
+    let windowSize: CGSize
+    let diskSize: CGFloat
+    let timeFontSize: CGFloat
+    let bottomPadding: CGFloat
+
+    init(mode: FocusTimerFloatingTimerDisplayMode) {
+        switch mode {
+        case .diskAndTime:
+            windowSize = CGSize(width: FloatingTimerWindowScene.width, height: FloatingTimerWindowScene.height)
+            diskSize = 150
+            timeFontSize = 34
+            bottomPadding = 6
+        case .diskOnly:
+            windowSize = CGSize(width: FloatingTimerWindowScene.width, height: 190)
+            diskSize = 150
+            timeFontSize = 34
+            bottomPadding = 10
+        case .timeOnly:
+            windowSize = CGSize(width: FloatingTimerWindowScene.width, height: 96)
+            diskSize = 150
+            timeFontSize = 38
+            bottomPadding = 12
+        }
+    }
+}
+
+private extension FocusTimerFloatingTimerDisplayMode {
+    var showsDisk: Bool {
+        switch self {
+        case .diskAndTime, .diskOnly:
+            return true
+        case .timeOnly:
+            return false
+        }
+    }
+
+    var showsTime: Bool {
+        switch self {
+        case .diskAndTime, .timeOnly:
+            return true
+        case .diskOnly:
+            return false
+        }
     }
 }
 
@@ -142,6 +203,7 @@ private struct FloatingTimerDragStrip: NSViewRepresentable {
 private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
     let opacity: Double
     let clickThroughEnabled: Bool
+    let contentSize: CGSize
     let dragStripHeight: CGFloat
     let appearanceModeID: String
 
@@ -156,6 +218,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
                 from: view,
                 opacity: opacity,
                 clickThroughEnabled: clickThroughEnabled,
+                contentSize: contentSize,
                 dragStripHeight: dragStripHeight,
                 appearanceModeID: appearanceModeID
             )
@@ -164,6 +227,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
             from: view,
             opacity: opacity,
             clickThroughEnabled: clickThroughEnabled,
+            contentSize: contentSize,
             dragStripHeight: dragStripHeight,
             appearanceModeID: appearanceModeID
         )
@@ -177,6 +241,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
                     from: view,
                     opacity: opacity,
                     clickThroughEnabled: clickThroughEnabled,
+                    contentSize: contentSize,
                     dragStripHeight: dragStripHeight,
                     appearanceModeID: appearanceModeID
                 )
@@ -187,6 +252,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
             from: nsView,
             opacity: opacity,
             clickThroughEnabled: clickThroughEnabled,
+            contentSize: contentSize,
             dragStripHeight: dragStripHeight,
             appearanceModeID: appearanceModeID
         )
@@ -207,6 +273,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
             from view: NSView,
             opacity: Double,
             clickThroughEnabled: Bool,
+            contentSize: CGSize,
             dragStripHeight: CGFloat,
             appearanceModeID: String
         ) {
@@ -221,6 +288,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
                         from: view,
                         opacity: opacity,
                         clickThroughEnabled: clickThroughEnabled,
+                        contentSize: contentSize,
                         dragStripHeight: dragStripHeight,
                         appearanceModeID: appearanceModeID
                     )
@@ -229,7 +297,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
             }
 
             self.window = window
-            configure(window, appearanceModeID: appearanceModeID)
+            configure(window, contentSize: contentSize, appearanceModeID: appearanceModeID)
 
             if clickThroughEnabled {
                 installMonitors()
@@ -246,7 +314,7 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
             window?.ignoresMouseEvents = false
         }
 
-        private func configure(_ window: NSWindow, appearanceModeID: String) {
+        private func configure(_ window: NSWindow, contentSize: CGSize, appearanceModeID: String) {
             window.identifier = NSUserInterfaceItemIdentifier(FloatingTimerWindowScene.id)
             window.level = .floating
             window.collectionBehavior.insert([.canJoinAllSpaces, .fullScreenAuxiliary])
@@ -263,6 +331,23 @@ private struct FloatingTimerWindowConfigurator: NSViewRepresentable {
             window.standardWindowButton(.closeButton)?.isHidden = false
             window.standardWindowButton(.miniaturizeButton)?.isHidden = false
             window.standardWindowButton(.zoomButton)?.isHidden = false
+            resize(window, to: contentSize)
+        }
+
+        private func resize(_ window: NSWindow, to contentSize: CGSize) {
+            let targetSize = NSSize(width: contentSize.width, height: contentSize.height)
+            guard abs(window.frame.width - targetSize.width) > 0.5 ||
+                abs(window.frame.height - targetSize.height) > 0.5 else {
+                return
+            }
+
+            let targetFrame = NSRect(
+                x: window.frame.minX,
+                y: window.frame.maxY - targetSize.height,
+                width: targetSize.width,
+                height: targetSize.height
+            )
+            window.setFrame(targetFrame, display: true)
         }
 
         private func neutralizeTitlebarSafeArea(in window: NSWindow) {

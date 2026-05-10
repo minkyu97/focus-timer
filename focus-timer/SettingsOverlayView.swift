@@ -17,6 +17,7 @@ struct SettingsOverlayView: View {
     @Binding var menuBarIconStyleID: String
     @Binding var floatingTimerOpacity: Double
     @Binding var floatingTimerClickThrough: Bool
+    @Binding var floatingTimerDisplayModeID: String
 
     @ObservedObject var updater: FocusTimerUpdater
     @ObservedObject var store: TimerStore
@@ -218,8 +219,19 @@ struct SettingsOverlayView: View {
 
                     settingsGroup {
                         VStack(alignment: .leading, spacing: 12) {
+                            Label("Floating Timer", systemImage: "macwindow")
+                                .font(.system(size: 14, weight: .medium))
+
+                            Picker("Floating Timer Display", selection: $floatingTimerDisplayModeID) {
+                                ForEach(FocusTimerFloatingTimerDisplayMode.allCases) { mode in
+                                    Text(mode.name).tag(mode.rawValue)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+
                             HStack {
-                                Label("Floating Timer Opacity", systemImage: "circle.lefthalf.filled")
+                                Text("Opacity")
                                     .font(.system(size: 14, weight: .medium))
 
                                 Spacer()
@@ -232,15 +244,13 @@ struct SettingsOverlayView: View {
 
                             Slider(value: $floatingTimerOpacity, in: 0.35...1, step: 0.05)
                                 .tint(selectedAccentColor)
-                        }
-                    }
 
-                    settingsGroup {
-                        Toggle(isOn: $floatingTimerClickThrough) {
-                            Label("Floating Timer Click-Through", systemImage: "cursorarrow")
-                                .font(.system(size: 14, weight: .medium))
+                            Toggle(isOn: $floatingTimerClickThrough) {
+                                Label("Click-Through", systemImage: "cursorarrow")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .toggleStyle(.switch)
                         }
-                        .toggleStyle(.switch)
                     }
 
                     settingsGroup {
@@ -268,6 +278,9 @@ struct SettingsOverlayView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             completionSoundID = FocusTimerCompletionSound.normalizedSoundID(completionSoundID)
+            floatingTimerDisplayModeID = FocusTimerFloatingTimerDisplayMode
+                .resolved(from: floatingTimerDisplayModeID)
+                .rawValue
         }
     }
 

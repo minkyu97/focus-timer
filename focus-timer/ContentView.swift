@@ -25,6 +25,7 @@ struct ContentView: View {
     @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
     @AppStorage("focusTimer.floatingTimerOpacity") private var floatingTimerOpacity = 0.92
     @AppStorage("focusTimer.floatingTimerClickThrough") private var floatingTimerClickThrough = false
+    @AppStorage("focusTimer.floatingTimerDisplayModeID") private var floatingTimerDisplayModeID = FocusTimerFloatingTimerDisplayMode.diskAndTime.rawValue
 
     @State private var activeTimerOverlay: TimerOverlay?
     @State private var timeText = FocusTimerFormatting.clock(25 * 60)
@@ -316,6 +317,7 @@ struct ContentView: View {
                 menuBarIconStyleID: $menuBarIconStyleID,
                 floatingTimerOpacity: $floatingTimerOpacity,
                 floatingTimerClickThrough: $floatingTimerClickThrough,
+                floatingTimerDisplayModeID: $floatingTimerDisplayModeID,
                 updater: updater,
                 store: store,
                 onClose: {

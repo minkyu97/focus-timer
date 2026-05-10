@@ -26,6 +26,7 @@ struct focus_timerApp: App {
     @AppStorage("focusTimer.menuBarIconStyleID") private var menuBarIconStyleID = FocusTimerMenuBarIconStyle.normal.rawValue
     @AppStorage("focusTimer.floatingTimerOpacity") private var floatingTimerOpacity = 0.92
     @AppStorage("focusTimer.floatingTimerClickThrough") private var floatingTimerClickThrough = false
+    @AppStorage("focusTimer.floatingTimerDisplayModeID") private var floatingTimerDisplayModeID = FocusTimerFloatingTimerDisplayMode.diskAndTime.rawValue
 
     init() {
         FocusTimerPreferenceMigration.migrateLegacyKeys()
@@ -76,6 +77,7 @@ struct focus_timerApp: App {
                 accentColor: accentColor,
                 windowOpacity: floatingTimerOpacity,
                 clickThroughEnabled: floatingTimerClickThrough,
+                displayModeID: floatingTimerDisplayModeID,
                 appearanceModeID: appearanceModeID,
                 menuBarIconEnabled: menuBarIconEnabled,
                 menuBarIconStyleID: menuBarIconStyleID

@@ -177,6 +177,29 @@ enum FocusTimerMenuBarIconStyle: String, CaseIterable, Identifiable {
     }
 }
 
+enum FocusTimerFloatingTimerDisplayMode: String, CaseIterable, Identifiable {
+    case diskAndTime
+    case diskOnly
+    case timeOnly
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .diskAndTime:
+            return "Disk + Time"
+        case .diskOnly:
+            return "Disk"
+        case .timeOnly:
+            return "Time"
+        }
+    }
+
+    static func resolved(from rawValue: String) -> FocusTimerFloatingTimerDisplayMode {
+        FocusTimerFloatingTimerDisplayMode(rawValue: rawValue) ?? .diskAndTime
+    }
+}
+
 enum FocusTimerPreferenceMigration {
     static func migrateLegacyKeys() {
         let userDefaults = UserDefaults.standard
