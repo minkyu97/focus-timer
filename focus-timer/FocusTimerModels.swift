@@ -403,7 +403,7 @@ final class FocusTimerSystemAppearance: ObservableObject {
     }
 
     private static func currentColorScheme() -> ColorScheme {
-        let bestMatch = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
+        let bestMatch = NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])
         return bestMatch == .darkAqua ? .dark : .light
     }
 }
