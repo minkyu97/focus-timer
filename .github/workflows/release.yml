@@ -25,7 +25,6 @@ jobs:
       CONFIGURATION: Release
       APP_NAME: Focus Timer
       ASSET_NAME: Focus-Timer-macOS.app.zip
-      CODE_SIGN_IDENTITY: Developer ID Application
 
     steps:
       - name: Resolve release tag
@@ -55,69 +54,7 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Validate signing and notarization secrets
-        env:
-          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
-          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          missing=()
-
-          [[ -n "$DEVELOPER_ID_CERTIFICATE_BASE64" ]] || missing+=("DEVELOPER_ID_CERTIFICATE_BASE64")
-          [[ -n "$DEVELOPER_ID_CERTIFICATE_PASSWORD" ]] || missing+=("DEVELOPER_ID_CERTIFICATE_PASSWORD")
-          [[ -n "$APPLE_ID" ]] || missing+=("APPLE_ID")
-          [[ -n "$APPLE_TEAM_ID" ]] || missing+=("APPLE_TEAM_ID")
-          [[ -n "$APPLE_APP_SPECIFIC_PASSWORD" ]] || missing+=("APPLE_APP_SPECIFIC_PASSWORD")
-
-          if (( ${#missing[@]} > 0 )); then
-            printf 'Missing required GitHub secret: %s\n' "${missing[@]}" >&2
-            exit 1
-          fi
-
-      - name: Import Developer ID certificate
-        env:
-          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
-          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
-          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
-          keychain_password="$(uuidgen)"
-
-          echo "$DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
-
-          security create-keychain -p "$keychain_password" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-          security unlock-keychain -p "$keychain_password" "$keychain_path"
-
-          security import "$certificate_path" \
-            -P "$DEVELOPER_ID_CERTIFICATE_PASSWORD" \
-            -A \
-            -t cert \
-            -f pkcs12 \
-            -k "$keychain_path"
-
-          security list-keychains -d user -s "$keychain_path"
-          security default-keychain -d user -s "$keychain_path"
-
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$keychain_password" \
-            "$keychain_path"
-
-          security find-identity -v -p codesigning "$keychain_path"
-
-      - name: Build Release app
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Build Release app with ad-hoc signing
         shell: bash
         run: |
           set -euo pipefail
@@ -131,10 +68,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGNING_REQUIRED=YES \
-            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            ENABLE_HARDENED_RUNTIME=YES \
-            OTHER_CODE_SIGN_FLAGS="--timestamp" \
+            CODE_SIGN_IDENTITY="-" \
             build
 
       - name: Locate built app
@@ -153,7 +87,7 @@ jobs:
 
           echo "app_path=$app_path" >> "$GITHUB_OUTPUT"
 
-      - name: Verify code signature
+      - name: Verify ad-hoc signature
         shell: bash
         run: |
           set -euo pipefail
@@ -163,32 +97,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$app_path"
           codesign --display --verbose=4 "$app_path"
 
-      - name: Notarize and staple app
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          app_path="${{ steps.app.outputs.app_path }}"
-          notary_zip="$RUNNER_TEMP/$APP_NAME-notary.zip"
-
-          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$notary_zip"
-
-          xcrun notarytool submit "$notary_zip" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-            --wait
-
-          xcrun stapler staple "$app_path"
-          xcrun stapler validate "$app_path"
-
-          spctl --assess --type execute --verbose=4 "$app_path"
-
-      - name: Package notarized app bundle
+      - name: Package .app bundle
         id: package
         shell: bash
         run: |
@@ -199,10 +108,6 @@ jobs:
           asset_path="$output_dir/$ASSET_NAME"
 
           mkdir -p "$output_dir"
-
-          codesign --verify --deep --strict --verbose=2 "$app_path"
-          xcrun stapler validate "$app_path"
-          spctl --assess --type execute --verbose=4 "$app_path"
 
           ditto -c -k --sequesterRsrc --keepParent "$app_path" "$asset_path"
 
