@@ -25,6 +25,7 @@ jobs:
       CONFIGURATION: Release
       APP_NAME: Focus Timer
       APPCAST_NAME: appcast.xml
+      RELEASE_NOTES_NAME: release-notes.html
       SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
 
     steps:
@@ -135,6 +136,7 @@ jobs:
       - name: Generate Sparkle appcast
         id: sparkle_appcast
         env:
+          GH_TOKEN: ${{ github.token }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           TAG_NAME: ${{ steps.release_tag.outputs.tag }}
           ASSET_PATH: ${{ steps.package.outputs.asset_path }}
@@ -167,11 +169,140 @@ jobs:
           short_version="${{ steps.app.outputs.short_version }}"
           bundle_version="${{ steps.app.outputs.bundle_version }}"
           minimum_system_version="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$app_path/Contents/Info.plist" 2>/dev/null || echo "13.0")"
-          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
           archive_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${ASSET_NAME}"
+          release_notes_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${RELEASE_NOTES_NAME}"
           pub_date="$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")"
           output_dir="$RUNNER_TEMP/release"
           appcast_path="$output_dir/$APPCAST_NAME"
+          release_json_path="$RUNNER_TEMP/release.json"
+          release_notes_markdown_path="$RUNNER_TEMP/release-notes.md"
+          release_notes_payload_path="$RUNNER_TEMP/release-notes-payload.json"
+          release_notes_fragment_path="$RUNNER_TEMP/release-notes-fragment.html"
+          release_notes_title_path="$RUNNER_TEMP/release-notes-title.txt"
+          release_notes_path="$output_dir/$RELEASE_NOTES_NAME"
+
+          if gh release view "$TAG_NAME" --json name,body > "$release_json_path" 2>/dev/null; then
+            python3 - "$release_json_path" "$release_notes_title_path" "$release_notes_markdown_path" "$TAG_NAME" <<'PY'
+          import json
+          import sys
+
+          release_json_path, title_path, markdown_path, tag_name = sys.argv[1:]
+
+          with open(release_json_path, "r", encoding="utf-8") as file:
+              release = json.load(file)
+
+          title = release.get("name") or tag_name
+          body = release.get("body") or f"Release {tag_name}"
+
+          with open(title_path, "w", encoding="utf-8") as file:
+              file.write(title)
+
+          with open(markdown_path, "w", encoding="utf-8") as file:
+              file.write(body)
+          PY
+          else
+            printf "%s" "$TAG_NAME" > "$release_notes_title_path"
+            printf "Release %s" "$TAG_NAME" > "$release_notes_markdown_path"
+          fi
+
+          python3 - "$release_notes_markdown_path" "$release_notes_payload_path" "$GITHUB_REPOSITORY" <<'PY'
+          import json
+          import sys
+
+          markdown_path, payload_path, repository = sys.argv[1:]
+
+          with open(markdown_path, "r", encoding="utf-8") as file:
+              markdown = file.read()
+
+          with open(payload_path, "w", encoding="utf-8") as file:
+              json.dump(
+                  {
+                      "text": markdown,
+                      "mode": "gfm",
+                      "context": repository,
+                  },
+                  file,
+              )
+          PY
+
+          if ! gh api /markdown --input "$release_notes_payload_path" > "$release_notes_fragment_path"; then
+            python3 - "$release_notes_markdown_path" "$release_notes_fragment_path" <<'PY'
+          import html
+          import sys
+
+          markdown_path, fragment_path = sys.argv[1:]
+
+          with open(markdown_path, "r", encoding="utf-8") as file:
+              markdown = file.read()
+
+          with open(fragment_path, "w", encoding="utf-8") as file:
+              file.write(f"<pre>{html.escape(markdown)}</pre>")
+          PY
+          fi
+
+          python3 - "$release_notes_title_path" "$release_notes_fragment_path" "$release_notes_path" "$short_version" <<'PY'
+          import html
+          import sys
+
+          title_path, fragment_path, release_notes_path, short_version = sys.argv[1:]
+
+          with open(title_path, "r", encoding="utf-8") as file:
+              title = file.read().strip() or f"Focus Timer {short_version}"
+
+          with open(fragment_path, "r", encoding="utf-8") as file:
+              body = file.read()
+
+          document = f"""<!doctype html>
+          <html lang=\"en\">
+          <head>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+            <style>
+              :root {{
+                color-scheme: light dark;
+              }}
+              body {{
+                margin: 0;
+                padding: 16px;
+                color: CanvasText;
+                background: Canvas;
+                font: 13px -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;
+                line-height: 1.45;
+              }}
+              h1 {{
+                margin: 0 0 12px;
+                font-size: 18px;
+                line-height: 1.25;
+              }}
+              h2, h3 {{
+                margin: 16px 0 8px;
+                font-size: 15px;
+              }}
+              p, ul, ol, pre {{
+                margin: 0 0 10px;
+              }}
+              ul, ol {{
+                padding-left: 22px;
+              }}
+              a {{
+                color: LinkText;
+              }}
+              code, pre {{
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                white-space: pre-wrap;
+              }}
+            </style>
+          </head>
+          <body>
+            <h1>{html.escape(title)}</h1>
+            {body}
+          </body>
+          </html>
+          """
+
+          with open(release_notes_path, "w", encoding="utf-8") as file:
+              file.write(document)
+          PY
 
           cat > "$appcast_path" <<EOF
           <?xml version="1.0" encoding="utf-8"?>
@@ -187,7 +318,7 @@ jobs:
                 <sparkle:version>${bundle_version}</sparkle:version>
                 <sparkle:shortVersionString>${short_version}</sparkle:shortVersionString>
                 <sparkle:minimumSystemVersion>${minimum_system_version}</sparkle:minimumSystemVersion>
-                <sparkle:releaseNotesLink>${release_url}</sparkle:releaseNotesLink>
+                <sparkle:releaseNotesLink>${release_notes_url}</sparkle:releaseNotesLink>
                 <enclosure url="${archive_url}" ${signature_attrs} type="application/zip" />
               </item>
             </channel>
@@ -195,6 +326,7 @@ jobs:
           EOF
 
           echo "appcast_path=$appcast_path" >> "$GITHUB_OUTPUT"
+          echo "release_notes_path=$release_notes_path" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -203,6 +335,7 @@ jobs:
           path: |
             ${{ steps.package.outputs.asset_path }}
             ${{ steps.sparkle_appcast.outputs.appcast_path }}
+            ${{ steps.sparkle_appcast.outputs.release_notes_path }}
           if-no-files-found: error
 
       - name: Create or update GitHub release
@@ -211,14 +344,15 @@ jobs:
           TAG_NAME: ${{ steps.release_tag.outputs.tag }}
           ASSET_PATH: ${{ steps.package.outputs.asset_path }}
           APPCAST_PATH: ${{ steps.sparkle_appcast.outputs.appcast_path }}
+          RELEASE_NOTES_PATH: ${{ steps.sparkle_appcast.outputs.release_notes_path }}
         shell: bash
         run: |
           set -euo pipefail
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "$ASSET_PATH" "$APPCAST_PATH" --clobber
+            gh release upload "$TAG_NAME" "$ASSET_PATH" "$APPCAST_PATH" "$RELEASE_NOTES_PATH" --clobber
           else
-            gh release create "$TAG_NAME" "$ASSET_PATH" "$APPCAST_PATH" \
+            gh release create "$TAG_NAME" "$ASSET_PATH" "$APPCAST_PATH" "$RELEASE_NOTES_PATH" \
               --title "$TAG_NAME" \
               --notes "Release $TAG_NAME" \
               --verify-tag
