@@ -57,13 +57,14 @@ provided. To test update UI with a configured updater, pass the public key as a
 build setting:
 
 ```sh
-SPARKLE_PUBLIC_ED_KEY="your-public-key" xcodebuild \
+xcodebuild \
   -project focus-timer.xcodeproj \
   -scheme focus-timer \
   -configuration Debug \
   -sdk macosx \
   -derivedDataPath .derivedData \
   CODE_SIGNING_ALLOWED=NO \
+  SPARKLE_PUBLIC_ED_KEY="your-public-key" \
   build
 ```
 

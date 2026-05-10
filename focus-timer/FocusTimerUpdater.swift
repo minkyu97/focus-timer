@@ -15,6 +15,7 @@ final class FocusTimerUpdater: ObservableObject {
     @Published private(set) var allowsAutomaticUpdates = false
 
     private var hasStartedUpdater = false
+    private var hasRequestedLaunchUpdateCheck = false
     private var observations: [NSKeyValueObservation] = []
 
     init() {
@@ -52,7 +53,16 @@ final class FocusTimerUpdater: ObservableObject {
 
         hasStartedUpdater = true
         updaterController.startUpdater()
+        checkForUpdatesOnLaunchIfNeeded()
         refreshState()
+    }
+
+    private func checkForUpdatesOnLaunchIfNeeded() {
+        guard !hasRequestedLaunchUpdateCheck else { return }
+        guard updaterController.updater.automaticallyChecksForUpdates else { return }
+
+        hasRequestedLaunchUpdateCheck = true
+        updaterController.updater.checkForUpdatesInBackground()
     }
 
     private func observeUpdater() {
