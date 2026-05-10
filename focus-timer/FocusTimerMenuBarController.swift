@@ -13,12 +13,14 @@ struct FocusTimerMenuBarBridge: View {
 
     var body: some View {
         Color.clear
-            .onAppear(perform: updateMenuBar)
-            .onChange(of: isEnabled) { _ in
+            .onAppear {
                 updateMenuBar()
             }
-            .onChange(of: styleID) { _ in
-                updateMenuBar()
+            .onChange(of: isEnabled) { newIsEnabled in
+                updateMenuBar(isEnabled: newIsEnabled)
+            }
+            .onChange(of: styleID) { newStyleID in
+                updateMenuBar(styleID: newStyleID)
             }
             .onChange(of: updater.canCheckForUpdates) { _ in
                 updateMenuBar()
@@ -28,13 +30,16 @@ struct FocusTimerMenuBarBridge: View {
             }
     }
 
-    private func updateMenuBar() {
+    private func updateMenuBar(
+        isEnabled: Bool? = nil,
+        styleID: String? = nil
+    ) {
         FocusTimerMenuBarController.shared.configure(
             clock: clock,
             store: store,
             updater: updater,
-            isEnabled: isEnabled,
-            styleID: styleID,
+            isEnabled: isEnabled ?? self.isEnabled,
+            styleID: styleID ?? self.styleID,
             onOpenFloatingTimer: onOpenFloatingTimer,
             onOpenSettings: onOpenSettings
         )
