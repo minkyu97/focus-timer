@@ -170,7 +170,6 @@ jobs:
           bundle_version="${{ steps.app.outputs.bundle_version }}"
           minimum_system_version="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$app_path/Contents/Info.plist" 2>/dev/null || echo "13.0")"
           archive_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${ASSET_NAME}"
-          release_notes_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${RELEASE_NOTES_NAME}"
           pub_date="$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")"
           output_dir="$RUNNER_TEMP/release"
           appcast_path="$output_dir/$APPCAST_NAME"
@@ -179,6 +178,7 @@ jobs:
           release_notes_payload_path="$RUNNER_TEMP/release-notes-payload.json"
           release_notes_fragment_path="$RUNNER_TEMP/release-notes-fragment.html"
           release_notes_title_path="$RUNNER_TEMP/release-notes-title.txt"
+          release_notes_description_path="$RUNNER_TEMP/release-notes-description.html"
           release_notes_path="$output_dir/$RELEASE_NOTES_NAME"
 
           if gh release view "$TAG_NAME" --json name,body > "$release_json_path" 2>/dev/null; then
@@ -240,11 +240,11 @@ jobs:
           PY
           fi
 
-          python3 - "$release_notes_title_path" "$release_notes_fragment_path" "$release_notes_path" "$short_version" <<'PY'
+          python3 - "$release_notes_title_path" "$release_notes_fragment_path" "$release_notes_path" "$release_notes_description_path" "$short_version" <<'PY'
           import html
           import sys
 
-          title_path, fragment_path, release_notes_path, short_version = sys.argv[1:]
+          title_path, fragment_path, release_notes_path, description_path, short_version = sys.argv[1:]
 
           with open(title_path, "r", encoding="utf-8") as file:
               title = file.read().strip() or f"Focus Timer {short_version}"
@@ -302,7 +302,14 @@ jobs:
 
           with open(release_notes_path, "w", encoding="utf-8") as file:
               file.write(document)
+
+          description = f"<h1>{html.escape(title)}</h1>\n{body}"
+
+          with open(description_path, "w", encoding="utf-8") as file:
+              file.write(description.replace("]]>", "]]]]><![CDATA[>"))
           PY
+
+          release_notes_description="$(cat "$release_notes_description_path")"
 
           cat > "$appcast_path" <<EOF
           <?xml version="1.0" encoding="utf-8"?>
@@ -318,7 +325,9 @@ jobs:
                 <sparkle:version>${bundle_version}</sparkle:version>
                 <sparkle:shortVersionString>${short_version}</sparkle:shortVersionString>
                 <sparkle:minimumSystemVersion>${minimum_system_version}</sparkle:minimumSystemVersion>
-                <sparkle:releaseNotesLink>${release_notes_url}</sparkle:releaseNotesLink>
+                <description><![CDATA[
+          ${release_notes_description}
+                ]]></description>
                 <enclosure url="${archive_url}" ${signature_attrs} type="application/zip" />
               </item>
             </channel>
