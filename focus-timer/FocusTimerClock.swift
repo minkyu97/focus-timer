@@ -2,6 +2,7 @@ import Foundation
 import Combine
 
 final class FocusTimerClock: ObservableObject {
+    static let defaultDurationSeconds = 25 * 60
     static let maxDurationSeconds = 60 * 60
     private static let minDurationSeconds = 1
 
@@ -13,7 +14,7 @@ final class FocusTimerClock: ObservableObject {
     private var targetDate: Date?
     private var ticker: AnyCancellable?
 
-    init(initialSeconds: Int = 25 * 60) {
+    init(initialSeconds: Int = defaultDurationSeconds) {
         let duration = Self.clampedDuration(initialSeconds)
         selectedSeconds = duration
         remainingSeconds = duration

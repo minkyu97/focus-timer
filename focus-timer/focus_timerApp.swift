@@ -14,8 +14,8 @@ struct focus_timerApp: App {
     @StateObject private var windowCommandCenter = FocusTimerWindowCommandCenter.shared
     #endif
 
-    @StateObject private var clock = FocusTimerClock()
-    @StateObject private var store = TimerStore()
+    @StateObject private var clock: FocusTimerClock
+    @StateObject private var store: TimerStore
     @StateObject private var systemAppearance = FocusTimerSystemAppearance()
 
     @AppStorage("focusTimer.accentColorID") private var accentColorID = FocusTimerTheme.tomato.rawValue
@@ -28,6 +28,10 @@ struct focus_timerApp: App {
 
     init() {
         FocusTimerPreferenceMigration.migrateLegacyKeys()
+
+        let timerStore = TimerStore()
+        _store = StateObject(wrappedValue: timerStore)
+        _clock = StateObject(wrappedValue: FocusTimerClock(initialSeconds: timerStore.lastUsedDurationSeconds))
     }
 
     private var accentColor: Color {

@@ -29,6 +29,12 @@ final class TimerStore: ObservableObject {
         return pinnedTimers + recentTimers
     }
 
+    var lastUsedDurationSeconds: Int {
+        timers
+            .max { $0.lastUsed < $1.lastUsed }?
+            .durationSeconds ?? FocusTimerClock.defaultDurationSeconds
+    }
+
     var hasRecentTimers: Bool {
         timers.contains { !$0.isPinned }
     }
