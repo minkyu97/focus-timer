@@ -108,11 +108,10 @@ struct SettingsOverlayView: View {
 
                     settingsGroup {
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle(isOn: $soundEnabled) {
+                            settingsToggleRow("Completion Sound", isOn: $soundEnabled) {
                                 Label("Completion Sound", systemImage: "speaker.wave.2")
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .toggleStyle(.switch)
 
                             Picker("Finish Sound", selection: $completionSoundID) {
                                 ForEach(FocusTimerCompletionSound.options(customSoundName: customCompletionSoundName)) { option in
@@ -156,11 +155,10 @@ struct SettingsOverlayView: View {
                                 .opacity(canRemoveSelectedSound ? 1 : 0.28)
                             }
 
-                            Toggle(isOn: $completionNotificationEnabled) {
+                            settingsToggleRow("Completion Notification", isOn: $completionNotificationEnabled) {
                                 Label("Completion Notification", systemImage: "bell")
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .toggleStyle(.switch)
                         }
                     }
 
@@ -169,21 +167,23 @@ struct SettingsOverlayView: View {
                             Label("Updates", systemImage: "arrow.triangle.2.circlepath")
                                 .font(.system(size: 14, weight: .medium))
 
-                            Toggle(isOn: automaticUpdateChecksBinding) {
+                            settingsToggleRow(
+                                "Automatically Check for Updates",
+                                isOn: automaticUpdateChecksBinding,
+                                isEnabled: canEditUpdaterSettings
+                            ) {
                                 Text("Automatically Check for Updates")
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .toggleStyle(.switch)
-                            .disabled(!canEditUpdaterSettings)
-                            .opacity(canEditUpdaterSettings ? 1 : 0.45)
 
-                            Toggle(isOn: automaticDownloadUpdatesBinding) {
+                            settingsToggleRow(
+                                "Download Updates Automatically",
+                                isOn: automaticDownloadUpdatesBinding,
+                                isEnabled: canAutomaticallyDownloadUpdates
+                            ) {
                                 Text("Download Updates Automatically")
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .toggleStyle(.switch)
-                            .disabled(!canAutomaticallyDownloadUpdates)
-                            .opacity(canAutomaticallyDownloadUpdates ? 1 : 0.45)
 
                             Button {
                                 updater.checkForUpdates()
@@ -199,11 +199,10 @@ struct SettingsOverlayView: View {
 
                     settingsGroup {
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle(isOn: $menuBarIconEnabled) {
+                            settingsToggleRow("Menu Bar Icon", isOn: $menuBarIconEnabled) {
                                 Label("Menu Bar Icon", systemImage: "menubar.rectangle")
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .toggleStyle(.switch)
 
                             Picker("Menu Bar Icon Type", selection: $menuBarIconStyleID) {
                                 ForEach(FocusTimerMenuBarIconStyle.allCases) { style in
@@ -245,11 +244,10 @@ struct SettingsOverlayView: View {
                             Slider(value: $floatingTimerOpacity, in: 0.35...1, step: 0.05)
                                 .tint(selectedAccentColor)
 
-                            Toggle(isOn: $floatingTimerClickThrough) {
+                            settingsToggleRow("Click-Through", isOn: $floatingTimerClickThrough) {
                                 Label("Click-Through", systemImage: "cursorarrow")
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .toggleStyle(.switch)
                         }
                     }
 
@@ -398,6 +396,25 @@ struct SettingsOverlayView: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             )
+    }
+
+    private func settingsToggleRow<LabelContent: View>(
+        _ accessibilityLabel: String,
+        isOn: Binding<Bool>,
+        isEnabled: Bool = true,
+        @ViewBuilder label: () -> LabelContent
+    ) -> some View {
+        HStack(spacing: 12) {
+            label()
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle(accessibilityLabel, isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
+        .frame(maxWidth: .infinity)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
     }
 }
 
