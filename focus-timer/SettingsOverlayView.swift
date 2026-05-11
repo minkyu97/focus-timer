@@ -21,6 +21,11 @@ struct SettingsOverlayView: View {
 
     @ObservedObject var updater: FocusTimerUpdater
     @ObservedObject var store: TimerStore
+    @StateObject private var completionSoundPlayer = FocusTimerCompletionSoundPlayer.shared
+
+    private let addSoundButtonWidth: CGFloat = 95
+    private let previewSoundButtonWidth: CGFloat = 75
+    private let removeSoundButtonWidth: CGFloat = 75
 
     let onClose: () -> Void
 
@@ -129,6 +134,8 @@ struct SettingsOverlayView: View {
                                 } label: {
                                     Label("Add Sound", systemImage: "plus.circle")
                                         .font(.system(size: 13, weight: .semibold))
+                                        .frame(width: addSoundButtonWidth, alignment: .leading)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless)
                                 .disabled(!soundEnabled)
@@ -137,17 +144,26 @@ struct SettingsOverlayView: View {
                                 Button {
                                     previewCompletionSound()
                                 } label: {
-                                    Label("Preview", systemImage: "play.circle")
+                                    Label(
+                                        completionSoundPlayer.isPreviewing ? "Stop" : "Preview",
+                                        systemImage: completionSoundPlayer.isPreviewing ? "stop.circle" : "play.circle"
+                                    )
                                         .font(.system(size: 13, weight: .semibold))
+                                        .frame(width: previewSoundButtonWidth, alignment: .leading)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless)
                                 .disabled(!soundEnabled)
+                                .foregroundStyle(completionSoundPlayer.isPreviewing ? Color.red : Color.primary)
+                                .opacity(soundEnabled ? 1 : 0.45)
 
                                 Button {
                                     removeCustomSound()
                                 } label: {
                                     Label("Remove", systemImage: "trash")
                                         .font(.system(size: 13, weight: .semibold))
+                                        .frame(width: removeSoundButtonWidth, alignment: .leading)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless)
                                 .disabled(!canRemoveSelectedSound)
@@ -280,6 +296,13 @@ struct SettingsOverlayView: View {
                 .resolved(from: floatingTimerDisplayModeID)
                 .rawValue
         }
+        .onChange(of: completionSoundID) { soundID in
+            previewSelectedSoundIfNeeded(soundID: soundID)
+        }
+        .onChange(of: customCompletionSoundName) { _ in
+            guard completionSoundID == FocusTimerCompletionSound.customID else { return }
+            previewSelectedSoundIfNeeded(soundID: completionSoundID)
+        }
     }
 
     private var automaticUpdateChecksBinding: Binding<Bool> {
@@ -368,8 +391,17 @@ struct SettingsOverlayView: View {
 
     private func previewCompletionSound() {
         #if os(macOS)
-        FocusTimerCompletionSoundPlayer.shared.play(soundID: completionSoundID)
+        if completionSoundPlayer.isPreviewing {
+            completionSoundPlayer.stopPreview()
+        } else {
+            completionSoundPlayer.preview(soundID: completionSoundID)
+        }
         #endif
+    }
+
+    private func previewSelectedSoundIfNeeded(soundID: String) {
+        guard soundEnabled, completionSoundPlayer.isPreviewing else { return }
+        completionSoundPlayer.preview(soundID: soundID)
     }
 
     private func removeCustomSound() {

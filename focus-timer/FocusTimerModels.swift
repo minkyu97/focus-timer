@@ -472,6 +472,7 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
     static let shared = FocusTimerCompletionSoundPlayer()
 
     @Published private(set) var isRinging = false
+    @Published private(set) var isPreviewing = false
 
     private var activeSound: NSSound?
     private var activePlaybackID: UUID?
@@ -479,6 +480,19 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
     private init() {}
 
     func play(soundID: String) {
+        play(soundID: soundID, kind: .completion)
+    }
+
+    func preview(soundID: String) {
+        play(soundID: soundID, kind: .preview)
+    }
+
+    func stopPreview() {
+        guard isPreviewing else { return }
+        stop()
+    }
+
+    private func play(soundID: String, kind: PlaybackKind) {
         stop()
 
         let normalizedSoundID = FocusTimerCompletionSound.normalizedSoundID(soundID)
@@ -489,7 +503,7 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
                 return
             }
 
-            play(sound)
+            play(sound, kind: kind)
             return
         }
 
@@ -503,7 +517,7 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
             return
         }
 
-        play(sound)
+        play(sound, kind: kind)
     }
 
     func stop() {
@@ -511,20 +525,24 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
         activeSound = nil
         activePlaybackID = nil
         isRinging = false
+        isPreviewing = false
     }
 
-    private func play(_ sound: NSSound) {
+    private func play(_ sound: NSSound, kind: PlaybackKind) {
         let playbackID = UUID()
         activePlaybackID = playbackID
         activeSound = sound
+        sound.loops = kind == .completion
 
         guard sound.play() else {
             stop()
             return
         }
 
-        isRinging = true
+        isRinging = kind == .completion
+        isPreviewing = kind == .preview
 
+        guard kind == .preview else { return }
         guard sound.duration.isFinite, sound.duration > 0 else { return }
         let playbackDuration = sound.duration + 0.15
         DispatchQueue.main.asyncAfter(deadline: .now() + playbackDuration) { [weak self, weak sound] in
@@ -541,6 +559,7 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
         activeSound = nil
         activePlaybackID = nil
         isRinging = false
+        isPreviewing = false
     }
 
     private func customSound() -> NSSound? {
@@ -548,6 +567,11 @@ final class FocusTimerCompletionSoundPlayer: ObservableObject {
         guard FileManager.default.fileExists(atPath: customSoundURL.path) else { return nil }
 
         return NSSound(contentsOf: customSoundURL, byReference: false)
+    }
+
+    private enum PlaybackKind {
+        case completion
+        case preview
     }
 }
 
